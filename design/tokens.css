@@ -1,0 +1,35 @@
+/* CODED TAROT — Design Tokens (OKLCH 기반)
+   Brand-Pack: luxurious / Trend-Pack: oversized-typography, glassmorphism
+   § K 적용
+*/
+
+:root {
+  /* ── 팔레트 (흑·녹 2색 원칙) ── */
+  --color-bg:          oklch(0% 0 0);           /* #000000 */
+  --color-primary:     oklch(80% 0.23 140);     /* #00FF41 — 터미널 그린 */
+  --color-primary-dim: oklch(40% 0.15 140);     /* #005A18 — 희미한 그린 */
+  --color-danger:      oklch(55% 0.22 25);      /* #FF3300 — 위험 레드 */
+  --color-muted:       oklch(25% 0.05 140);     /* 경계선, 구분자 */
+
+  /* ── 타이포그래피 (oversized-typography) ── */
+  --font-mono: 'Courier New', Courier, monospace;
+  --font-size-terminal: 16px;
+  --line-height-terminal: 1.8;
+  --letter-spacing-terminal: 0.04em;
+
+  /* ── 레이아웃 ── */
+  --border-radius-terminal: 20px;
+  --border-radius-terminal-lg: 45px;
+  --terminal-max-w: 468.5px;
+  --terminal-max-h: 1002px;
+
+  /* ── 글래스모피즘 (카드 표시 영역) ── */
+  --glass-bg: oklch(10% 0.04 140 / 0.6);
+  --glass-border: oklch(80% 0.23 140 / 0.25);
+  --glass-blur: 8px;
+  --glass-shadow: 0 0 20px oklch(80% 0.23 140 / 0.2);
+
+  /* ── 애니메이션 ── */
+  --transition-fast: 0.15s ease;
+  --transition-glow: 0.4s ease;
+}

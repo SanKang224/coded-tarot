@@ -1,0 +1,62 @@
+{
+  "project": "coded-tarot",
+  "version": "0.1.0",
+  "lastUpdated": "2026-05-25",
+  "features": [
+    {
+      "id": "F001",
+      "name": "마녀 문체 카드 해석 (AI Reading)",
+      "description": "3장의 드로운 카드를 TAG 01~03에 연결하여 마녀 문체로 해석. /api/read 엔드포인트 + CardReading 컴포넌트.",
+      "priority": 1,
+      "status": "in_progress",
+      "dependencies": ["F002"],
+      "ac": [
+        "카드 ID + isReversed + TAG 3개 → AI 해석 API 호출",
+        "마녀 문체(~다. ~인가.) 준수",
+        "역방향 카드 별도 해석",
+        "✦ 기호 접두사",
+        "타이핑 애니메이션 출력"
+      ]
+    },
+    {
+      "id": "F002",
+      "name": "타로 카드 데이터 (78장 전체)",
+      "description": "78장 타로 카드 이름, 키워드, 의미(정/역) 데이터 파일. AI 프롬프트에 삽입용.",
+      "priority": 2,
+      "status": "pending",
+      "dependencies": [],
+      "ac": [
+        "Major Arcana 22장 + Minor Arcana 56장",
+        "카드 ID(0~77) → 이름 + 정방향 키워드 + 역방향 키워드",
+        "TypeScript 타입 정의 포함"
+      ]
+    },
+    {
+      "id": "F003",
+      "name": "로그인 실제 연동",
+      "description": "email/Google/Naver/Kakao OAuth 실제 구현.",
+      "priority": 4,
+      "status": "pending",
+      "dependencies": [],
+      "ac": []
+    },
+    {
+      "id": "F004",
+      "name": "토큰 시스템",
+      "description": "질문당 1 토큰 소모. 충전 플로우. Supabase 연동.",
+      "priority": 5,
+      "status": "pending",
+      "dependencies": ["F003"],
+      "ac": []
+    },
+    {
+      "id": "F005",
+      "name": "모바일 최적화",
+      "description": "iOS Safari / Android Chrome 터미널 UI 최적화. 키보드 팝업 대응.",
+      "priority": 3,
+      "status": "pending",
+      "dependencies": ["F001"],
+      "ac": []
+    }
+  ]
+}
