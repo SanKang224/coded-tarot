@@ -118,6 +118,7 @@ export default function Terminal() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [menuIndex, setMenuIndex] = useState(0);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const [questionContext, setQuestionContext] = useState<string[]>([]);
   const [isOwner, setIsOwner] = useState<boolean>(true); // 본인 질문 여부
@@ -192,7 +193,9 @@ export default function Terminal() {
   }, [logs.length]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTop = scrollContainerRef.current.scrollHeight;
+    }
   }, [logs, step, cardReadings]);
 
   useEffect(() => {
@@ -1494,7 +1497,7 @@ export default function Terminal() {
         </span>
       </div>
 
-      <div className="flex-1 overflow-y-auto hide-scrollbar flex flex-col">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto hide-scrollbar flex flex-col">
         <div className="pt-4">
           <LogDisplay logs={logs} />
         </div>
