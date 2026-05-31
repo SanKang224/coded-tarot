@@ -203,9 +203,13 @@ export default function Terminal() {
       if (session) {
         const { isNewUser } = await loadTokenBalance();
         if (logs.length === 0) {
+          // 새 세션 (로그인 후 첫 로드, 혹은 새로고침)
           await runConnectionSequence();
+          await showMainMenu(isNewUser);
+        } else {
+          // OAuth 복귀 — 로그 이미 복원됨, 메뉴만 추가
+          await showMainMenu(isNewUser);
         }
-        await showMainMenu(isNewUser);
       } else {
         clearLogs();
         runBootSequence();
@@ -363,13 +367,19 @@ export default function Terminal() {
   const processLoginFlow = async (option: string) => {
     setIsProcessing(true);
     const supabase = createClient();
-    const providerMap: Record<string, 'google' | 'kakao' | 'email'> = {
-      google: 'google', kakao: 'kakao', email: 'email', naver: 'email',
+    const providerMap: Record<string, 'google' | 'kakao' | 'naver'> = {
+      google: 'google', kakao: 'kakao', naver: 'naver',
     };
-    const provider = providerMap[option.toLowerCase()] ?? 'email';
-    if (provider === 'email') {
-      addLog("이메일 주소를 입력하라.", "system");
-      setStep('login_email');
+    if (option.toLowerCase() === 'email') {
+      addLog("■ 이메일 로그인은 현재 점검 중이다.", "system");
+      await runDelay(400);
+      addLog("Google, Kakao, Naver 중 하나를 선택하라.", "system");
+      setIsProcessing(false);
+      return;
+    }
+    const provider = providerMap[option.toLowerCase()];
+    if (!provider) {
+      addLog("■ 알 수 없는 선택이다.", "system");
       setIsProcessing(false);
       return;
     }
