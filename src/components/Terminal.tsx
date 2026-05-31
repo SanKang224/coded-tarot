@@ -1094,6 +1094,23 @@ export default function Terminal() {
       return;
     }
 
+    // /menu — 어느 단계에서든 메인으로 복귀 (인증 전·메인 제외)
+    const menuSteps: FlowStep[] = [...authSteps, 'main'];
+    const isMenuIntent = (s: string) => /^\/menu$|^\/main$|^\/back$/i.test(s.trim());
+    if (!menuSteps.includes(step) && isMenuIntent(input)) {
+      addLog(input.trim(), 'user');
+      addLog("■ 메인으로 돌아간다.", "system");
+      await runDelay(300);
+      setQuestionContext([]);
+      setReadingPlan(null);
+      setQuestionAttempts(0);
+      setCardReadings([]);
+      addLog("- - - - - - - - - - - - - - - -", "separator");
+      addLog("[Q] 질문   [T] 토큰   [B] 가방", "system");
+      setStep('main');
+      return;
+    }
+
     if (isCopyIntent(input)) {
       addLog(input.trim(), 'user');
       if (!copySnapshot) {
@@ -1456,6 +1473,7 @@ export default function Terminal() {
         addLog("무엇을 알고 싶은가.", "system");
         await runDelay(400);
         addLog("마녀의 카드는 들을 준비가 되었다.", "system");
+        addLog("(/menu 입력 시 언제든 메인으로 돌아갈 수 있다.)", "system");
         setQuestionContext([]);
         setStep('ask_question');
         setIsProcessing(false);
