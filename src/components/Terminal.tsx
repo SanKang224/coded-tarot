@@ -41,7 +41,7 @@ const TOKEN_PACKAGES = [
   { id: 3, tokens: 30, price: '8,910원' },
 ];
 
-const LOGIN_OPTIONS = ['email', 'google', 'naver', 'kakao'];
+const LOGIN_OPTIONS = ['email', 'google', 'kakao'];
 
 // ─────────────────────────────────────────────────────────
 // Parsers
@@ -369,8 +369,8 @@ export default function Terminal() {
   const processLoginFlow = async (option: string) => {
     setIsProcessing(true);
     const supabase = createClient();
-    const providerMap: Record<string, 'google' | 'kakao' | 'naver'> = {
-      google: 'google', kakao: 'kakao', naver: 'naver',
+    const providerMap: Record<string, 'google' | 'kakao'> = {
+      google: 'google', kakao: 'kakao',
     };
     if (option.toLowerCase() === 'email') {
       addLog("■ 이메일 로그인은 현재 점검 중이다.", "system");
