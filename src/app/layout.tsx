@@ -7,8 +7,8 @@ const robotoMono = Roboto_Mono({
   variable: '--font-roboto-mono'
 });
 
-const notoSansKr = Noto_Sans_KR({ 
-  subsets: ["latin"],
+const notoSansKr = Noto_Sans_KR({
+  subsets: ["latin", "korean"],
   weight: ['400', '500'],
   variable: '--font-noto-sans-kr'
 });

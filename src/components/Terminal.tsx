@@ -123,8 +123,9 @@ export default function Terminal() {
   const [isOwner, setIsOwner] = useState<boolean>(true); // 본인 질문 여부
   const [identityConfirmed, setIdentityConfirmed] = useState<boolean>(false); // 이번 세션 본인/타인 확인 여부
   const [readingPlan, setReadingPlan] = useState<ReadingPlan | null>(null);
-  const [tokenCount, setTokenCount] = useState<number>(3);
+  const [tokenCount, setTokenCount] = useState<number>(0);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
 
   const [currentDeck, setCurrentDeck] = useState<Card[]>([]);
   const [drawnCards, setDrawnCards] = useState<Card[]>([]);
@@ -308,8 +309,9 @@ export default function Terminal() {
       const res = await fetch('/api/tokens');
       if (res.ok) {
         const data = await res.json();
-        setTokenCount(data.balance ?? 3);
+        setTokenCount(data.balance ?? 0);
         setIsAdmin(data.isAdmin ?? false);
+        setIsLoggedIn(true);
         const key = `onboarding_done_${user?.id}`;
         const alreadySeen = localStorage.getItem(key) === 'true';
         if (!alreadySeen && user) {
@@ -1445,8 +1447,8 @@ export default function Terminal() {
         <span style={{ flex: 1, overflow: 'hidden', color: 'rgba(0,255,65,0.3)', letterSpacing: '0.08em', textAlign: 'center', userSelect: 'none' }}>
           {'─'.repeat(20)}
         </span>
-        <span style={{ whiteSpace: 'nowrap', color: isAdmin ? '#FFD700' : tokenCount <= 0 ? '#FF3300' : '#00FF41' }}>
-          {isAdmin ? '[TOKEN: ∞]' : `[TOKEN: ${tokenCount}]`}
+        <span style={{ whiteSpace: 'nowrap', color: isAdmin ? '#FFD700' : !isLoggedIn ? '#00FF41' : tokenCount <= 0 ? '#FF3300' : '#00FF41' }}>
+          {isAdmin ? '[TOKEN: ∞]' : !isLoggedIn ? '[TOKEN: ?]' : `[TOKEN: ${tokenCount}]`}
         </span>
       </div>
 
