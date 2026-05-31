@@ -33,7 +33,8 @@ type FlowStep =
   | 'confirm_context' | 'select_type' | 'confirm_plan'
   | 'confirm_flow_config' | 'ask_flow_period' | 'confirm_new_topic'
   | 'ready_to_draw' | 'card_draw'
-  | 'token_shop' | 'token_shop_confirm';
+  | 'token_shop' | 'token_shop_confirm'
+  | 'bag';
 
 const TOKEN_PACKAGES = [
   { id: 1, tokens: 3,  price: '990원' },
@@ -215,7 +216,7 @@ export default function Terminal() {
         } else {
           // OAuth 복귀 — 기존 로그 유지, step만 main으로 복원
           setStep('main');
-          addLog("[Q] 질문   [T] 토큰", "system");
+          addLog("[Q] 질문   [T] 토큰   [B] 가방", "system");
         }
       } else {
         clearLogs();
@@ -350,7 +351,7 @@ export default function Terminal() {
       await runDelay(500);
       addLog("- - - - - - - - - - - - - - - -", "separator", false);
     }
-    addLog("[Q] 질문   [T] 토큰", "system");
+    addLog("[Q] 질문   [T] 토큰   [B] 가방", "system");
     setIdentityConfirmed(false); // 새 질문 세션 시작 시 본인/타인 초기화
     setStep('main');
   };
@@ -838,6 +839,26 @@ export default function Terminal() {
         `[${r.positionName}]\nCARD #${String(r.cardNum).padStart(2,'00')} — ${r.cardNameKo} ${r.isReversed ? '[역방향]' : '[정방향]'}\n${r.reading}`
       ).join('\n\n');
     setCopySnapshot(prev => prev ? `${prev}\n\n${'─'.repeat(28)}\n\n${newSnapshotBlock}` : newSnapshotBlock);
+
+    // 리딩 기록 저장 (백그라운드 — 실패해도 무시)
+    if (allPositionsFilled) {
+      fetch('/api/readings/save', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          questionText: questionContext.join(' / '),
+          readingType: readingPlan.type,
+          cards: accReadings.map(r => ({
+            positionName: r.positionName,
+            cardNameKo: r.cardNameKo,
+            cardNum: r.cardNum,
+            isReversed: r.isReversed,
+            reading: r.reading,
+          })),
+          readingContent: newSnapshotBlock,
+        }),
+      }).catch(() => {/* 저장 실패는 무시 */});
+    }
 
     // 리딩 완료 후 처리
     await runDelay(600);
@@ -1425,6 +1446,11 @@ export default function Terminal() {
         // 질문·타로 관련 키워드 (ㄱㄱ·할래·해줘 등 후치사 무관)
         return /질문|고민|물어|타로|봐줘|봐줄래|봐 줘|카드|리딩|점봐|점 봐|뽑아|궁금|상담|운세|점괘/.test(lower);
       };
+      const isBagIntent = (s: string) => {
+        const t = s.trim().toUpperCase();
+        if (['B', 'ㅠ', '가방', '/BAG', '/bag'].includes(t)) return true;
+        return /가방|히스토리|기록|내역|과거|이전/.test(s.trim());
+      };
       if (isQuestionIntent(input)) {
         setIsProcessing(true);
         addLog("무엇을 알고 싶은가.", "system");
@@ -1433,8 +1459,55 @@ export default function Terminal() {
         setQuestionContext([]);
         setStep('ask_question');
         setIsProcessing(false);
+      } else if (isBagIntent(input)) {
+        setIsProcessing(true);
+        addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
+        addLog("▶ 가방을 연다.", "system");
+        await runDelay(300);
+        try {
+          const res = await fetch('/api/readings/list');
+          if (res.status === 401) {
+            addLog("■ 세션이 만료되었다. /logout 후 재로그인하라.", "system");
+          } else {
+            const data = await res.json();
+            const list: Array<{
+              id: string;
+              created_at: string;
+              question_text: string;
+              reading_type: string;
+              cards: Array<{ positionName: string; cardNameKo: string; isReversed: boolean }>;
+              synthesis?: string;
+            }> = data.readings ?? [];
+            if (list.length === 0) {
+              addLog("가방이 비어 있다.", "system");
+              addLog("아직 카드를 뽑지 않았다.", "system");
+            } else {
+              addLog(`리딩 기록 — 최근 ${list.length}건`, "system");
+              addLog("", "system", false);
+              list.forEach((r, i) => {
+                const d = new Date(r.created_at);
+                const dateStr = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+                addLog(`[${String(i+1).padStart(2,'0')}] ${dateStr}  ${r.reading_type}`, "system");
+                addLog(`     Q: ${r.question_text.slice(0, 40)}${r.question_text.length > 40 ? '...' : ''}`, "system");
+                const cardNames = (r.cards as Array<{cardNameKo: string; isReversed: boolean}>)
+                  .map(c => `${c.cardNameKo}${c.isReversed ? '(역)' : ''}`)
+                  .join(' · ');
+                addLog(`     ♦ ${cardNames}`, "system");
+                if (r.synthesis) {
+                  addLog(`     ✦ ${r.synthesis.split('\n')[0].slice(0, 50)}`, "system");
+                }
+                if (i < list.length - 1) addLog("", "system", false);
+              });
+            }
+          }
+        } catch {
+          addLog("■ 기록 회선 불안정.", "system");
+        }
+        addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
+        setStep('main');
+        setIsProcessing(false);
       } else {
-        addLog("■ 알 수 없는 입력. [Q] 또는 [T]를 입력하라.", "system");
+        addLog("■ 알 수 없는 입력. [Q] [T] [B] 중 하나를 입력하라.", "system");
       }
       return;
     }
