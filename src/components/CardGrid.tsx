@@ -78,13 +78,12 @@ export default function CardGrid({ deck, requiredCount, disabledIndices = new Se
       {/* 1행 가로 스크롤 */}
       <div
         ref={scrollRef}
+        className="card-grid-scroll"
         style={{
           overflowX: 'auto',
           overflowY: 'hidden',
           whiteSpace: 'nowrap',
-          paddingBottom: '18px',
-          scrollbarWidth: 'thin',
-          scrollbarColor: 'rgba(0,255,65,0.3) transparent',
+          paddingBottom: '10px',
         }}
       >
         {deck.map((_, deckIdx) => {

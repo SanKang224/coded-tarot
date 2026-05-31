@@ -28,6 +28,12 @@ body {
   scrollbar-width: none; 
 }
 
+/* 카드 그리드 스크롤바 */
+.card-grid-scroll::-webkit-scrollbar { height: 4px; }
+.card-grid-scroll::-webkit-scrollbar-track { background: rgba(0,255,65,0.08); }
+.card-grid-scroll::-webkit-scrollbar-thumb { background: rgba(0,255,65,0.5); border-radius: 2px; }
+.card-grid-scroll { scrollbar-width: thin; scrollbar-color: rgba(0,255,65,0.5) rgba(0,255,65,0.08); }
+
 /* 텍스트 선택 방지 (터미널 UX) */
 .terminal-text { user-select: none; }
 .user-input { user-select: text; }
