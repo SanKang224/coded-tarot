@@ -207,8 +207,8 @@ export default function Terminal() {
         }
         await showMainMenu(isNewUser);
       } else {
-        if (logs.length === 0) runBootSequence();
-        else setStep('main');
+        clearLogs();
+        runBootSequence();
       }
     };
     init();
@@ -333,6 +333,7 @@ export default function Terminal() {
       addLog("...", "system");
       await runDelay(1000);
       addLog("토큰 3개가 들어 있다.", "system");
+      setTokenCount(3);
       await runDelay(800);
       addLog("언제부터 있었던 것인지는 알 수 없다.", "system");
       await runDelay(500);
@@ -863,7 +864,9 @@ export default function Terminal() {
       await supabase.auth.signOut();
       clearLogs();
       setStep('boot');
-      setTokenCount(3);
+      setTokenCount(0);
+      setIsAdmin(false);
+      setIsLoggedIn(false);
       setQuestionContext([]);
       setReadingPlan(null);
       setQuestionAttempts(0);

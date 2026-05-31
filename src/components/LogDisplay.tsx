@@ -3,7 +3,7 @@ import { LogType } from '@/lib/useTerminalLog';
 
 export default function LogDisplay({ logs }: { logs: LogType[] }) {
   return (
-    <div className="flex flex-col gap-1 terminal-text text-[16px] leading-[1.8]">
+    <div className="flex flex-col gap-1 terminal-text font-mono text-[16px] leading-[1.8]">
       {logs.map((log) => (
         <LogItem key={log.id} log={log} />
       ))}
