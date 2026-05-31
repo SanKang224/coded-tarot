@@ -1524,7 +1524,7 @@ export default function Terminal() {
 
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto hide-scrollbar flex flex-col">
         <div className="pt-4">
-          <LogDisplay logs={logs} />
+          <LogDisplay logs={logs} onTap={(val) => { if (!isProcessing) handleUserInput(val); }} />
         </div>
 
         {/* 셔플 애니메이션 */}
