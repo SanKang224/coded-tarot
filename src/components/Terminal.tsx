@@ -386,8 +386,9 @@ export default function Terminal() {
     addLog("외부 인증 서버로 이동한다...", "system");
     window.sessionStorage.setItem('safe_leave', 'true');
     await runDelay(600);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await supabase.auth.signInWithOAuth({
-      provider,
+      provider: provider as any,
       options: { redirectTo: `${window.location.origin}/auth/callback` },
     });
     if (error) {
