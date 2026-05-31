@@ -28,7 +28,7 @@ type ReadingPlan = {
 };
 
 type FlowStep =
-  | 'boot' | 'birthdate' | 'login' | 'login_email' | 'login_email_type' | 'login_email_pw' | 'main'
+  | 'boot' | 'login' | 'login_email' | 'login_email_type' | 'login_email_pw' | 'main'
   | 'ask_question' | 'confirm_identity' | 'analyzing'
   | 'confirm_context' | 'select_type' | 'confirm_plan'
   | 'confirm_flow_config' | 'ask_flow_period' | 'confirm_new_topic'
@@ -41,7 +41,7 @@ const TOKEN_PACKAGES = [
   { id: 3, tokens: 30, price: '8,910원' },
 ];
 
-const LOGIN_OPTIONS = ['email', 'google', 'kakao'];
+const LOGIN_OPTIONS = ['google', 'kakao'];
 
 // ─────────────────────────────────────────────────────────
 // Parsers
@@ -362,10 +362,11 @@ export default function Terminal() {
     await runConnectionSequence();
     addLog("", "system", false);
     await runDelay(400);
-    addLog("14세 미만은 접근 불가.", "system");
+    addLog("14세 미만은 이용할 수 없다.", "system");
     await runDelay(800);
-    addLog("생년월일 8자리를 입력하라. 예) 19970224", "system");
-    setStep('birthdate');
+    addLog("로그인 방법을 선택하라.", "system");
+    setMenuIndex(0);
+    setStep('login');
     setIsProcessing(false);
   };
 
@@ -857,15 +858,9 @@ export default function Terminal() {
 
   const showTokenShop = async () => {
     addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
-    addLog("토큰을 얻고자 한다면 대가를 지불하라.", "system");
-    addLog("", "system", false);
-    TOKEN_PACKAGES.forEach(p => {
-      addLog(`${p.id}.  ${String(p.tokens).padStart(2)}토큰  —  ${p.price}`, "system");
-    });
-    addLog("", "system", false);
-    addLog("번호를 선택하라.  N: 취소", "system");
+    addLog("■ 결제 시스템은 현재 점검 중이다.", "system");
+    addLog("곧 열린다. 조금만 기다려라.", "system");
     addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
-    setStep('token_shop');
   };
 
   const processTokenCharge = async (packageId: number) => {
@@ -989,7 +984,7 @@ export default function Terminal() {
       if (['T', 'ㅅ', 'ㅆ', 'ㅅㅅ', 'ㅆㅆ', 'ㅅㅆ', 'ㅆㅅ'].includes(t)) return true;
       return /토큰|충전/.test(s.trim());
     };
-    const authSteps: FlowStep[] = ['boot', 'birthdate', 'login', 'login_email', 'login_email_type', 'login_email_pw'];
+    const authSteps: FlowStep[] = ['boot', 'login', 'login_email', 'login_email_type', 'login_email_pw'];
     if (!authSteps.includes(step) && isTokenIntent(input)) {
       addLog(input.trim(), 'user');
       setShopReturnStep(step);
@@ -1338,27 +1333,6 @@ export default function Terminal() {
     const confirmSteps: FlowStep[] = ['confirm_plan', 'confirm_flow_config', 'confirm_context', 'confirm_identity', 'ask_flow_period', 'login'];
     if (input === '' && !confirmSteps.includes(step)) return;
     addLog(input, 'user');
-
-    // birthdate
-    if (step === 'birthdate') {
-      setIsProcessing(true);
-      if (!/^\d{8}$/.test(input)) {
-        addLog("■ 형식 오류. 8자리 숫자로 입력하라.", "system");
-      } else {
-        const year = parseInt(input.substring(0, 4));
-        if (new Date().getFullYear() - year < 14) {
-          addLog("■ 접근 불가.", "system");
-        } else {
-          addLog("확인.", "system");
-          await runDelay(500);
-          addLog("로그인 방법을 선택하라.", "system");
-          setMenuIndex(0);
-          setStep('login');
-        }
-      }
-      setIsProcessing(false);
-      return;
-    }
 
     // main
     if (step === 'main') {
