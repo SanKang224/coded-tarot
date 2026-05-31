@@ -6,34 +6,59 @@ const TERMINAL_FONT = 'var(--font-roboto-mono), var(--font-noto-sans-kr), "Couri
 // ─── 클릭 가능 파서 ───────────────────────────────────────────
 type Segment = { text: string; clickValue?: string };
 
-const BRACKET_MAP: Record<string, string> = {
-  '[엔터]': '', '[엔터]/Y': '', '[Y]': 'Y', '[N]': 'N',
-  '[Q]': 'Q', '[T]': 'T',
-};
-const WORD_CLICK = new Set(['Y', 'N', 'Q', 'T', '1', '2', '3']);
-
 function parseClickable(text: string): Segment[] {
   const segments: Segment[] = [];
-  // 순서: 브라켓 → 단어토큰 → 구분자
-  const re = /(\[엔터\](?:\/Y)?|\[[YNQT]\]|[가-힣A-Za-z0-9]+|[^가-힣A-Za-z0-9\[\]]+|\[)/g;
-  let m: RegExpExecArray | null;
+  let i = 0;
 
-  while ((m = re.exec(text)) !== null) {
-    const tok = m[0];
-    if (tok in BRACKET_MAP) {
-      segments.push({ text: tok, clickValue: BRACKET_MAP[tok] });
-    } else if (WORD_CLICK.has(tok)) {
-      segments.push({ text: tok, clickValue: tok });
-    } else {
-      // 인접 비클릭 세그먼트와 합치기
-      const last = segments[segments.length - 1];
-      if (last && !('clickValue' in last)) {
-        last.text += tok;
-      } else {
-        segments.push({ text: tok });
-      }
+  while (i < text.length) {
+    const rest = text.slice(i);
+
+    // 1. [엔터]/Y 또는 [엔터]
+    const enterM = rest.match(/^\[엔터\](?:\/Y)?/);
+    if (enterM) {
+      segments.push({ text: enterM[0], clickValue: '' });
+      i += enterM[0].length;
+      continue;
     }
+
+    // 2. [X] 한글라벨 — 브라켓 + 공백 + 한글 단어 전체를 하나의 버튼으로
+    //    ex) [Q] 질문  [T] 토큰  [B] 가방  [Y] 본인  [N] 타인
+    const bracketLabelM = rest.match(/^(\[[A-Z]\])\s+([가-힣]+)/);
+    if (bracketLabelM) {
+      const key = bracketLabelM[1][1]; // 브라켓 안의 알파벳
+      segments.push({ text: bracketLabelM[0], clickValue: key });
+      i += bracketLabelM[0].length;
+      continue;
+    }
+
+    // 3. [X] 브라켓 단독
+    const bracketM = rest.match(/^\[[A-Z]\]/);
+    if (bracketM) {
+      const key = bracketM[0][1];
+      segments.push({ text: bracketM[0], clickValue: key });
+      i += bracketM[0].length;
+      continue;
+    }
+
+    // 4. N. 숫자+점 (번호 선택지 — 숫자+점만 클릭, 뒤 텍스트는 plain)
+    //    "1. 질문" → [1.][질문]
+    const numDotM = rest.match(/^([1-9]\.)/);
+    if (numDotM) {
+      segments.push({ text: numDotM[0], clickValue: numDotM[1][0] });
+      i += numDotM[0].length;
+      continue;
+    }
+
+    // 5. 나머지 — 이전 비클릭 세그먼트에 합치기
+    const last = segments[segments.length - 1];
+    if (last && !('clickValue' in last)) {
+      last.text += text[i];
+    } else {
+      segments.push({ text: text[i] });
+    }
+    i++;
   }
+
   return segments;
 }
 
@@ -79,7 +104,7 @@ function LogItem({ log, onTap }: { log: LogType; onTap?: (val: string) => void }
   const colorClass = 'text-[#00FF41]';
   const prefix = log.type === 'user' ? '> ' : '';
 
-  // 유저 입력 or 타이핑 중이면 버튼 없이 plain 출력
+  // 유저 입력 or 타이핑 중이면 plain 출력
   if (log.type === 'user' || !done || !onTap) {
     return (
       <div className={`${colorClass} break-words whitespace-pre-wrap`}>

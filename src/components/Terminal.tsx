@@ -152,6 +152,7 @@ export default function Terminal() {
   const [loginMode, setLoginMode] = useState<'login' | 'signup'>('login'); // 이메일 로그인/가입 모드
   const [pendingReshuffleCtx, setPendingReshuffleCtx] = useState<{ context: string[]; ownerFlag: boolean } | null>(null);
   const [readingSessionSummary, setReadingSessionSummary] = useState<string>(''); // 이번 세션 리딩 누적 요약 (덱 리셋에도 유지)
+  const [choiceTexts, setChoiceTexts] = useState<{ opt1: string; opt2: string } | null>(null); // CHOICE 예시 텍스트 저장
 
   const currentOptions = step === 'login' ? LOGIN_OPTIONS : [];
 
@@ -543,6 +544,14 @@ export default function Terminal() {
         for (const line of choiceLines) addLog(line, "system");
         addLog("", "system", false);
         addLog("1, 2, 3 중 하나를 입력하라.", "system");
+        // 예시 텍스트 파싱하여 저장 (1. 질문 — [예시] / 2. 흐름 — [예시])
+        const extractOpt = (prefix: string) => {
+          const line = choiceLines.find(l => l.trimStart().startsWith(prefix));
+          if (!line) return '';
+          const after = line.slice(line.indexOf('—') + 1).trim();
+          return after;
+        };
+        setChoiceTexts({ opt1: extractOpt('1.'), opt2: extractOpt('2.') });
         setStep('select_type');
       } else {
         // 경우 B — AI 추가 질문을 그대로 출력
@@ -1212,19 +1221,58 @@ export default function Terminal() {
       addLog(input, 'user');
       const trimmed = input.trim();
       if (trimmed === '1') {
-        // QUESTION 선택 — 컨텍스트에 타입 확정 지시 주입 후 바로 분석
-        addLog("■ [QUESTION 모드] 구체적인 질문으로 전환한다.", "system");
-        addLog("어떤 질문으로 볼 것인가? 한 문장으로 명확히 입력하라.", "system");
-        // 컨텍스트에 모드 확정 지시 삽입 — 다음 분석에서 QUESTION으로 직행
-        setQuestionContext(prev => [...prev, '[모드 확정: QUESTION — 구체적 질문으로 포지션 설계하라]']);
-        setStep('ask_question');
+        // QUESTION 선택 — 예시 텍스트를 질문으로 확정, 바로 분석
+        const confirmed = choiceTexts?.opt1 || '';
+        if (confirmed) {
+          addLog(`■ 확정: ${confirmed}`, "system");
+          const ctx = [...questionContext, `[모드 확정: QUESTION] ${confirmed}`];
+          setQuestionContext(ctx);
+          await processAnalysis(ctx, isOwner);
+        } else {
+          addLog("■ [QUESTION 모드] 구체적인 질문으로 전환한다.", "system");
+          addLog("어떤 질문으로 볼 것인가? 한 문장으로 명확히 입력하라.", "system");
+          setQuestionContext(prev => [...prev, '[모드 확정: QUESTION — 구체적 질문으로 포지션 설계하라]']);
+          setStep('ask_question');
+        }
         return;
       }
       if (trimmed === '2') {
-        // FLOW 선택 — AI 재분석 없이 기간만 입력받아 바로 플랜 생성
-        addLog("■ [FLOW 모드] 흐름 리딩으로 전환한다.", "system");
-        addLog("기간을 입력하라. (예: 3개월, 6주, 30일)", "system");
-        setStep('ask_flow_period');
+        // FLOW 선택 — 예시 텍스트에서 기간 파싱 시도, 있으면 바로 확정
+        const opt2 = choiceTexts?.opt2 || '';
+        const numM = opt2.match(/(\d+)\s*(개월|주|일)/);
+        if (numM) {
+          const n = Math.min(12, Math.max(1, parseInt(numM[1])));
+          const rawUnit = numM[2];
+          const unit: '일' | '주' | '월' = rawUnit === '개월' ? '월' : rawUnit === '주' ? '주' : '일';
+          addLog(`■ 확정: ${opt2}`, "system");
+          const positions = Array.from({ length: n }, (_, i) => ({
+            name: `${unit}${i + 1}`,
+            question: `${i + 1}${unit}차의 흐름`,
+          }));
+          const plan: ReadingPlan = { type: 'FLOW', cardCount: n, timeUnit: unit, positions };
+          setReadingPlan(plan);
+          addLog(`>> 설정 확정: ${n}장 / ${unit}단위`, "system");
+          await runDelay(300);
+          const { deck: reshuffled, attempts } = shuffleDeckWithAlignment(createFreshDeck());
+          setCurrentDeck(reshuffled);
+          setDeckIndex(0);
+          setDrawnCards([]);
+          setCardReadings([]);
+          setDrawnDeckIndices(new Set());
+          setDrawnCardIds(new Set());
+          setShuffleTopCard(reshuffled[0]);
+          await waitForShuffleAnimation();
+          await logAlignmentAttempts(attempts);
+          addLog("덱 초기화 완료. 카드를 고르라.", "system");
+          addLog(`POSITION_01 ║ ${positions[0].name} — "${positions[0].question}"`, "system");
+          setStep('card_draw');
+        } else {
+          // 기간 파싱 실패 → 입력 받기
+          addLog("■ [FLOW 모드] 흐름 리딩으로 전환한다.", "system");
+          if (opt2) addLog(`참고: ${opt2}`, "system");
+          addLog("기간을 입력하라. (예: 3개월, 6주, 30일)", "system");
+          setStep('ask_flow_period');
+        }
         return;
       }
       if (trimmed === '3') {
@@ -1232,6 +1280,7 @@ export default function Terminal() {
         addLog("■ 다른 질문을 입력하라.", "system");
         setQuestionContext([]);
         setQuestionAttempts(0);
+        setChoiceTexts(null);
         setStep('ask_question');
         return;
       }
