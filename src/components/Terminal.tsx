@@ -201,9 +201,14 @@ export default function Terminal() {
       const supabase = createClient();
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        // 세션 있음 — 로그 유무 관계없이 바로 메인 (커넥션 시퀀스 없음)
         const { isNewUser } = await loadTokenBalance();
-        await showMainMenu(isNewUser);
+        if (logs.length === 0) {
+          // 새 탭 or 새로고침 후 세션 복귀 — 메인 메뉴만 표시
+          await showMainMenu(isNewUser);
+        } else {
+          // OAuth 복귀 — 기존 로그 유지, step만 main으로 복원
+          setStep('main');
+        }
       } else {
         clearLogs();
         runBootSequence();

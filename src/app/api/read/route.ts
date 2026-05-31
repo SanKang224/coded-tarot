@@ -47,14 +47,15 @@ export async function POST(req: Request) {
   }
 
   try {
+    const fullPrompt = `${READING_SYSTEM_PROMPT}\n\n${userPrompt}`;
+
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          system_instruction: { parts: [{ text: READING_SYSTEM_PROMPT }] },
-          contents: [{ parts: [{ text: userPrompt }] }],
+          contents: [{ parts: [{ text: fullPrompt }] }],
           generationConfig: {
             temperature: 0.85,
             maxOutputTokens: 400,
@@ -64,18 +65,25 @@ export async function POST(req: Request) {
     );
 
     const data = await response.json();
-    const raw: string = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? '';
+    const raw: string = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? '';
+
+    if (!raw) {
+      return NextResponse.json({
+        reading: '"카드는 침묵한다."\n오라클 회선이 불안정하다. 잠시 후 다시 시도하라.',
+      });
+    }
 
     const verdictMatch = raw.match(/선고\s*[:：]\s*"([^"]+)"/);
     const interpretMatch = raw.match(/해석\s*[:：]\s*([\s\S]+)/);
 
     const verdict = verdictMatch ? `"${verdictMatch[1]}"` : null;
-    const interpret = interpretMatch ? interpretMatch[1].trim() : raw.trim();
+    const interpret = interpretMatch ? interpretMatch[1].trim() : raw;
 
     const reading = verdict ? `${verdict}\n${interpret}` : interpret;
 
     return NextResponse.json({ reading });
-  } catch {
+  } catch (error) {
+    console.error('[/api/read]', error);
     return NextResponse.json({
       reading: '"카드는 침묵한다."\n오라클 회선이 불안정하다. 잠시 후 다시 시도하라.',
     });
