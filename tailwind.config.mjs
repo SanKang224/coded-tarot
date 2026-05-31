@@ -15,7 +15,7 @@ const config = {
         }
       },
       fontFamily: {
-        mono: ['var(--font-roboto-mono)', 'monospace'],
+        mono: ['var(--font-roboto-mono)', 'var(--font-noto-sans-kr)', 'monospace'],
         kr: ['var(--font-noto-sans-kr)', 'sans-serif'],
       },
       borderRadius: {
