@@ -16,19 +16,11 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'INVALID_CODE' }, { status: 400 });
   }
 
-  // 환경변수에서 코드 목록 파싱
-  const rawPromo = process.env.PROMO_CODES ?? '{}';
-  console.log('[/api/tokens/code] PROMO_CODES raw:', rawPromo);
-  let promoCodes: Record<string, number> = {};
-  try {
-    promoCodes = JSON.parse(rawPromo);
-    console.log('[/api/tokens/code] parsed:', promoCodes, 'input code:', code.toUpperCase());
-  } catch {
-    console.error('[/api/tokens/code] JSON parse failed:', rawPromo);
-    return NextResponse.json({ error: 'SERVER_ERROR' }, { status: 500 });
-  }
+  // 환경변수에서 코드 조회: PROMO_CODE_<CODE> 형태
+  const envKey = `PROMO_CODE_${code.toUpperCase()}`;
+  const tokensRaw = process.env[envKey];
+  const tokensToAdd = tokensRaw ? parseInt(tokensRaw, 10) : 0;
 
-  const tokensToAdd = promoCodes[code.toUpperCase()];
   if (!tokensToAdd) {
     return NextResponse.json({ error: 'INVALID_CODE' }, { status: 400 });
   }
