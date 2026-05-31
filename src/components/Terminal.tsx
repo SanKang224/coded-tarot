@@ -28,7 +28,7 @@ type ReadingPlan = {
 };
 
 type FlowStep =
-  | 'boot' | 'birthdate' | 'login' | 'login_email' | 'main'
+  | 'boot' | 'birthdate' | 'login' | 'login_email' | 'login_email_type' | 'login_email_pw' | 'main'
   | 'ask_question' | 'confirm_identity' | 'analyzing'
   | 'confirm_context' | 'select_type' | 'confirm_plan'
   | 'confirm_flow_config' | 'ask_flow_period' | 'confirm_new_topic'
@@ -147,6 +147,8 @@ export default function Terminal() {
   const [prevTopicContext, setPrevTopicContext] = useState<string>(''); // 직전 리딩 주제 (새 주제 감지용)
   const [shopReturnStep, setShopReturnStep] = useState<FlowStep>('main'); // 충전 완료 후 복귀 단계
   const [pendingPackageId, setPendingPackageId] = useState<number | null>(null); // 선택 중인 토큰 패키지
+  const [pendingEmail, setPendingEmail] = useState<string>(''); // 이메일 로그인 중 임시 저장
+  const [loginMode, setLoginMode] = useState<'login' | 'signup'>('login'); // 이메일 로그인/가입 모드
 
   const currentOptions = step === 'login' ? LOGIN_OPTIONS : [];
 
@@ -374,10 +376,9 @@ export default function Terminal() {
       google: 'google', kakao: 'kakao',
     };
     if (option.toLowerCase() === 'email') {
-      addLog("■ 이메일 로그인은 현재 점검 중이다.", "system");
-      await runDelay(400);
-      addLog("Google, Kakao, Naver 중 하나를 선택하라.", "system");
+      addLog("이메일을 입력하라.", "system");
       setIsProcessing(false);
+      setStep('login_email');
       return;
     }
     const provider = providerMap[option.toLowerCase()];
@@ -400,20 +401,37 @@ export default function Terminal() {
     }
   };
 
-  const processLoginEmail = async (email: string) => {
+  const processEmailPassword = async (password: string) => {
     setIsProcessing(true);
     const supabase = createClient();
-    addLog(`매직 링크를 전송한다: ${email}`, "system");
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
-    });
-    if (error) {
-      addLog(`■ AUTH_ERROR: ${error.message}`, "system");
+    if (loginMode === 'login') {
+      const { error } = await supabase.auth.signInWithPassword({ email: pendingEmail, password });
+      if (error) {
+        addLog("■ 이메일 또는 비밀번호가 올바르지 않다.", "system");
+        addLog("다시 입력하라.", "system");
+        setIsProcessing(false);
+        return;
+      }
+      const { isNewUser } = await loadTokenBalance();
+      await showMainMenu(isNewUser);
     } else {
+      const { error } = await supabase.auth.signUp({ email: pendingEmail, password });
+      if (error) {
+        addLog(`■ 가입 실패: ${error.message}`, "system");
+        setIsProcessing(false);
+        return;
+      }
+      addLog("가입이 완료되었다.", "system");
       await runDelay(400);
-      addLog("링크가 전송되었다. 받은 메일함을 확인하고 링크를 클릭하라.", "system");
-      addLog("링크를 클릭하면 이 터미널로 돌아온다.", "system");
+      // 가입 후 바로 로그인 시도
+      const { error: signInError } = await supabase.auth.signInWithPassword({ email: pendingEmail, password });
+      if (signInError) {
+        addLog("이메일 인증이 필요할 수 있다. 받은 메일함을 확인하라.", "system");
+        setIsProcessing(false);
+        return;
+      }
+      const { isNewUser } = await loadTokenBalance();
+      await showMainMenu(isNewUser);
     }
     setIsProcessing(false);
   };
@@ -971,7 +989,7 @@ export default function Terminal() {
       if (['T', 'ㅅ', 'ㅆ', 'ㅅㅅ', 'ㅆㅆ', 'ㅅㅆ', 'ㅆㅅ'].includes(t)) return true;
       return /토큰|충전/.test(s.trim());
     };
-    const authSteps: FlowStep[] = ['boot', 'birthdate', 'login', 'login_email'];
+    const authSteps: FlowStep[] = ['boot', 'birthdate', 'login', 'login_email', 'login_email_type', 'login_email_pw'];
     if (!authSteps.includes(step) && isTokenIntent(input)) {
       addLog(input.trim(), 'user');
       setShopReturnStep(step);
@@ -1013,11 +1031,44 @@ export default function Terminal() {
       return;
     }
 
-    // login_email
+    // login_email — 이메일 입력
     if (step === 'login_email') {
       if (input === '') return;
       addLog(input, 'user');
-      processLoginEmail(input);
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(input.trim())) {
+        addLog("■ 올바른 이메일 형식이 아니다.", "system");
+        return;
+      }
+      setPendingEmail(input.trim());
+      addLog("신규 가입: N   로그인: Y", "system");
+      setStep('login_email_type');
+      return;
+    }
+
+    // login_email_type — 신규/로그인 선택
+    if (step === 'login_email_type') {
+      if (input === '') return;
+      addLog(input, 'user');
+      if (isYes(input)) {
+        setLoginMode('login');
+        addLog("비밀번호를 입력하라.", "system");
+        setStep('login_email_pw');
+      } else if (isNo(input)) {
+        setLoginMode('signup');
+        addLog("비밀번호를 설정하라. (8자 이상)", "system");
+        setStep('login_email_pw');
+      } else {
+        addLog("■ Y: 로그인   N: 신규 가입", "system");
+      }
+      return;
+    }
+
+    // login_email_pw — 비밀번호 입력
+    if (step === 'login_email_pw') {
+      if (input === '') return;
+      addLog('••••••••', 'user');
+      processEmailPassword(input);
       return;
     }
 
