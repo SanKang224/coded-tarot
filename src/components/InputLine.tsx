@@ -27,6 +27,16 @@ export default function InputLine({ onSubmit, onArrowKey, disabled, allowEmpty }
     el.style.overflowY = el.scrollHeight > maxHeight ? 'auto' : 'hidden';
   };
 
+  const submitValue = () => {
+    const val = ref.current?.value.trim() || '';
+    if (!val && !allowEmpty) return;
+    if (ref.current) {
+      ref.current.value = '';
+      ref.current.style.height = 'auto';
+    }
+    onSubmit(val);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       e.preventDefault();
@@ -37,13 +47,19 @@ export default function InputLine({ onSubmit, onArrowKey, disabled, allowEmpty }
       // 한글 IME 조합 중이면 무시
       if (e.nativeEvent.isComposing) return;
       e.preventDefault();
-      const val = ref.current?.value.trim() || '';
-      if (!val && !allowEmpty) return;
-      if (ref.current) {
-        ref.current.value = '';
-        ref.current.style.height = 'auto';
+      submitValue();
+    }
+  };
+
+  const handleKeyUp = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // 모바일 키보드에서 Enter가 keydown 대신 keyup으로만 오는 경우 처리
+    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+      const el = ref.current;
+      if (el && el.value.trim() === '' && !allowEmpty) return;
+      // 이미 keydown에서 처리된 경우 중복 방지 (value가 비어있으면 이미 제출됨)
+      if (el && el.value !== '') {
+        submitValue();
       }
-      onSubmit(val);
     }
   };
 
@@ -65,8 +81,10 @@ export default function InputLine({ onSubmit, onArrowKey, disabled, allowEmpty }
           ref={ref}
           disabled={disabled}
           onKeyDown={handleKeyDown}
+          onKeyUp={handleKeyUp}
           onChange={handleChange}
           rows={1}
+          enterKeyHint="send"
           style={{
             color: '#00FF41',
             backgroundColor: 'transparent',
