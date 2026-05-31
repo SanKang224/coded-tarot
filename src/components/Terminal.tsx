@@ -201,15 +201,9 @@ export default function Terminal() {
       const supabase = createClient();
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
+        // 세션 있음 — 로그 유무 관계없이 바로 메인 (커넥션 시퀀스 없음)
         const { isNewUser } = await loadTokenBalance();
-        if (logs.length === 0) {
-          // 새 세션 (로그인 후 첫 로드, 혹은 새로고침)
-          await runConnectionSequence();
-          await showMainMenu(isNewUser);
-        } else {
-          // OAuth 복귀 — 로그 이미 복원됨, 메뉴만 추가
-          await showMainMenu(isNewUser);
-        }
+        await showMainMenu(isNewUser);
       } else {
         clearLogs();
         runBootSequence();
@@ -1446,8 +1440,11 @@ export default function Terminal() {
 
       {/* 상단 배너 */}
       <div
-        className="shrink-0 pb-2 mb-1 font-mono text-[13px] leading-none"
+        className="shrink-0 pb-2 mb-1"
         style={{
+          fontFamily: 'var(--font-roboto-mono), var(--font-noto-sans-kr), "Courier New", monospace',
+          fontSize: '13px',
+          lineHeight: 1,
           color: '#00FF41',
           borderBottom: '1px solid rgba(0,255,65,0.25)',
           letterSpacing: '0.03em',
