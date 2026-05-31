@@ -211,6 +211,7 @@ export default function Terminal() {
         } else {
           // OAuth 복귀 — 기존 로그 유지, step만 main으로 복원
           setStep('main');
+          addLog("[Q] 질문   [T] 토큰", "system");
         }
       } else {
         clearLogs();
@@ -391,7 +392,6 @@ export default function Terminal() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await supabase.auth.signInWithOAuth({
       provider: provider as any,
-      options: { redirectTo: `${window.location.origin}/auth/callback` },
     });
     if (error) {
       window.sessionStorage.removeItem('safe_leave');
