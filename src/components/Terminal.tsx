@@ -1534,40 +1534,74 @@ export default function Terminal() {
         addLog("▶ 가방을 연다.", "system");
         await runDelay(300);
         try {
-          const res = await fetch('/api/readings/list');
+          const res = await fetch('/api/bag');
           if (res.status === 401) {
             addLog("■ 세션이 만료되었다. /logout 후 재로그인하라.", "system");
           } else {
             const data = await res.json();
-            const list: Array<{
+
+            // ── 토큰 잔액 ─────────────────────────────────
+            const balance: number = data.tokenBalance ?? 0;
+            const adminFlag: boolean = data.isAdmin ?? false;
+            addLog(`TOKEN_BALANCE :: ${adminFlag ? '∞' : balance}`, "system");
+            addLog("", "system", false);
+
+            // ── 리딩 기록 ─────────────────────────────────
+            const readings: Array<{
               id: string;
               created_at: string;
               question_text: string;
               reading_type: string;
-              cards: Array<{ positionName: string; cardNameKo: string; isReversed: boolean }>;
+              cards: Array<{ cardNameKo: string; isReversed: boolean }>;
               synthesis?: string;
             }> = data.readings ?? [];
-            if (list.length === 0) {
-              addLog("가방이 비어 있다.", "system");
-              addLog("아직 카드를 뽑지 않았다.", "system");
+
+            addLog("[ READING HISTORY ]", "system");
+            if (readings.length === 0) {
+              addLog("  기록 없음.", "system");
             } else {
-              addLog(`리딩 기록 — 최근 ${list.length}건`, "system");
+              addLog(`  최근 ${readings.length}건`, "system");
               addLog("", "system", false);
-              list.forEach((r, i) => {
+              readings.forEach((r, i) => {
                 const d = new Date(r.created_at);
                 const dateStr = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
-                addLog(`[${String(i+1).padStart(2,'0')}] ${dateStr}  ${r.reading_type}`, "system");
-                addLog(`     Q: ${r.question_text.slice(0, 40)}${r.question_text.length > 40 ? '...' : ''}`, "system");
-                const cardNames = (r.cards as Array<{cardNameKo: string; isReversed: boolean}>)
-                  .map(c => `${c.cardNameKo}${c.isReversed ? '(역)' : ''}`)
+                addLog(`  [${String(i+1).padStart(2,'0')}] ${dateStr}  ${r.reading_type}`, "system");
+                addLog(`       Q: ${r.question_text.slice(0, 38)}${r.question_text.length > 38 ? '...' : ''}`, "system");
+                const cardNames = r.cards
+                  .map((c: { cardNameKo: string; isReversed: boolean }) => `${c.cardNameKo}${c.isReversed ? '(역)' : ''}`)
                   .join(' · ');
-                addLog(`     ♦ ${cardNames}`, "system");
+                addLog(`       ♦ ${cardNames}`, "system");
                 if (r.synthesis) {
-                  addLog(`     ✦ ${r.synthesis.split('\n')[0].slice(0, 50)}`, "system");
+                  addLog(`       ✦ ${r.synthesis.split('\n')[0].slice(0, 48)}`, "system");
                 }
-                if (i < list.length - 1) addLog("", "system", false);
+                if (i < readings.length - 1) addLog("", "system", false);
               });
             }
+            addLog("", "system", false);
+
+            // ── 결제 내역 ─────────────────────────────────
+            const payments: Array<{
+              id: string;
+              created_at: string;
+              amount: number;
+              tokens_added: number;
+              package_name: string;
+            }> = data.payments ?? [];
+
+            addLog("[ PAYMENT HISTORY ]", "system");
+            if (payments.length === 0) {
+              addLog("  결제 내역 없음.", "system");
+            } else {
+              payments.forEach((p, i) => {
+                const d = new Date(p.created_at);
+                const dateStr = `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+                addLog(`  [${String(i+1).padStart(2,'0')}] ${dateStr}`, "system");
+                addLog(`       ${p.package_name}  ${p.amount.toLocaleString()}원  +${p.tokens_added}토큰`, "system");
+                if (i < payments.length - 1) addLog("", "system", false);
+              });
+            }
+            addLog("", "system", false);
+            addLog("  ※ 결제 내역은 3년간 보관 후 자동 삭제된다.", "system");
           }
         } catch {
           addLog("■ 기록 회선 불안정.", "system");
