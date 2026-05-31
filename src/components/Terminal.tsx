@@ -630,28 +630,47 @@ export default function Terminal() {
       addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
       await runDelay(200);
 
-      // TIMING 모드: 숫자 기반 시간 출력
+      // TIMING 모드: AI 해석 (숫자 힌트 포함)
       if (readingPlan?.type === 'TIMING') {
         const timingNum = getTimingNumber(drawn.id);
-        const keywords = drawn.isReversed ? cardData.reversedKeywords : cardData.uprightKeywords;
-        const keywordStr = keywords.slice(0, 2).join(', ');
-        let timingLine: string;
-        if (timingNum === 0) {
-          timingLine = `"곧, 혹은 언제든지 가능하다."`;
-        } else {
-          timingLine = `"${timingNum}개월 혹은 ${timingNum}주 뒤."`;
+        const timingHint = timingNum === 0
+          ? '이 카드의 숫자는 0 또는 무한대로, 시간 제한이 없음을 암시한다.'
+          : `이 카드의 숫자는 ${timingNum}이다. ${timingNum}일, ${timingNum}주, ${timingNum}개월 중 맥락에 맞는 단위를 선택해 언급하라.`;
+        addLog("✦ 오라클이 읽는다...", "system");
+        try {
+          const res = await fetch('/api/read', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              card: {
+                id: drawn.id,
+                name: cardData.name,
+                nameKo: cardData.nameKo,
+                isReversed: drawn.isReversed,
+                uprightKeywords: cardData.uprightKeywords,
+                reversedKeywords: cardData.reversedKeywords,
+              },
+              position: { name: '타이밍', question: '언제 가능한가' },
+              questionContext: questionContext.join(' / '),
+              timingHint,
+            }),
+          });
+          const readingData = await res.json();
+          const reading: string = readingData.reading ?? '"시간은 카드가 말해주지 않는다."';
+
+          addLog(`✦ 타이밍`, "system");
+          addLog(`   "언제 가능한가"`, "system");
+          reading.split('\n').filter(l => l.trim()).forEach(line => addLog(line, "system"));
+          addLog("- - - - - - - - - - - - - - - -", "separator", false);
+
+          accReadings = [...accReadings, {
+            positionName: '타이밍', positionQuestion: '언제 가능한가',
+            cardNum: drawn.id + 1, cardNameKo: cardData.nameKo,
+            isReversed: drawn.isReversed, reading,
+          }];
+        } catch {
+          addLog("■ 오라클 회선 불안정. 잠시 후 다시 시도하라.", "system");
         }
-        const reading = `${timingLine}\n${cardData.nameKo}의 에너지 — ${keywordStr}.`;
-        const result: CardReadingResult = {
-          positionName: '타이밍',
-          positionQuestion: '언제 가능한가',
-          cardNum: drawn.id + 1,
-          cardNameKo: cardData.nameKo,
-          isReversed: drawn.isReversed,
-          reading,
-        };
-        accReadings = [...accReadings, result];
-        setCardReadings([...accReadings]);
         newSessionCount += 1;
         await runDelay(300);
         continue;

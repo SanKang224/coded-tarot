@@ -25,7 +25,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
   }
 
-  const { card, position, questionContext } = await req.json();
+  const { card, position, questionContext, timingHint } = await req.json();
   const apiKey = process.env.GEMINI_API_KEY;
 
   const directionStr = card.isReversed ? '역방향' : '정방향';
@@ -36,7 +36,7 @@ export async function POST(req: Request) {
   const userPrompt = `[카드] ${card.nameKo} (${card.name}) — ${directionStr}
 [키워드] ${keywords}
 [포지션] ${position.name}: ${position.question}
-[질문 컨텍스트] ${questionContext || '없음'}
+[질문 컨텍스트] ${questionContext || '없음'}${timingHint ? `\n[타이밍 힌트] ${timingHint}` : ''}
 
 위 카드를 해석하라.`;
 
