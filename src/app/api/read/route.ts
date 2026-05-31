@@ -68,6 +68,9 @@ export async function POST(req: Request) {
     const raw: string = data?.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? '';
 
     if (!raw) {
+      const reason = data?.candidates?.[0]?.finishReason ?? 'NO_CANDIDATE';
+      const promptFeedback = data?.promptFeedback?.blockReason ?? null;
+      console.error('[/api/read] empty raw — finishReason:', reason, '| blockReason:', promptFeedback, '| status:', data?.error?.status ?? 'none', '| message:', data?.error?.message ?? 'none');
       return NextResponse.json({
         reading: '"카드는 침묵한다."\n오라클 회선이 불안정하다. 잠시 후 다시 시도하라.',
       });

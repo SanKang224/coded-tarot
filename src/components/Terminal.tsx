@@ -748,10 +748,37 @@ export default function Terminal() {
     }
 
     // 상태 일괄 업데이트
+    const newPendingIdx = pendingPositionIndex + deckIndices.length;
     setDrawnCards(accDrawn);
     setDeckIndex(Math.max(...deckIndices) + 1);
-    setPendingPositionIndex(pendingPositionIndex + deckIndices.length);
+    setPendingPositionIndex(newPendingIdx);
     setSessionCount(newSessionCount);
+
+    // 종합 해석: 모든 포지션이 채워졌고 카드가 2장 이상일 때
+    const allPositionsFilled = newPendingIdx >= readingPlan.positions.length;
+    if (allPositionsFilled && readingPlan.positions.length >= 2) {
+      addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
+      addLog("✦ 종합", "system");
+      addLog("오라클이 전체를 읽는다...", "system");
+      try {
+        const synthRes = await fetch('/api/synthesis', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            readings: accReadings,
+            questionContext: questionContext.join(' / '),
+            readingType: readingPlan.type,
+          }),
+        });
+        const synthData = await synthRes.json();
+        const synthesis: string = synthData.synthesis ?? '카드들은 모두 제 자리에 놓였다.';
+        synthesis.split('\n').filter(l => l.trim()).forEach(line => addLog(line, "system"));
+      } catch {
+        addLog("■ 종합 회선 불안정.", "system");
+      }
+      addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
+      await runDelay(300);
+    }
 
     // 스냅샷 누적 업데이트 (꼬리질문 포함 모든 리딩 합산)
     const newSnapshotBlock = `[질문]\n${questionContext.join('\n')}\n\n` +
