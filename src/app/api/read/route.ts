@@ -10,7 +10,7 @@ const READING_SYSTEM_PROMPT = `너는 CODED TAROT의 마녀다.
 
 규칙:
 - 선고는 반드시 큰따옴표로 감쌀 것. 짧고 날카롭게.
-- 해석은 카드의 에너지를 질문과 연결해 풀어낼 것.
+- 해석은 카드의 에너지를 질문과 연결해 풀어낼 것. 반드시 완성된 문장으로 끝낼 것. 3~4문장 이내로 간결하게.
 - 역방향은 에너지가 막히거나 내면화된 관점으로 해석하라.
 - 문체: ~다. ~인가. ~이다. — ~해요/~합니다/~하세요 절대 금지.
 - 화려한 수식어 남발 금지. 직접적으로 말하라.
@@ -58,7 +58,7 @@ export async function POST(req: Request) {
           contents: [{ parts: [{ text: fullPrompt }] }],
           generationConfig: {
             temperature: 0.85,
-            maxOutputTokens: 800,
+            maxOutputTokens: 2048,
           },
         }),
       }
