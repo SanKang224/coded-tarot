@@ -595,6 +595,24 @@ export default function Terminal() {
     setIsProcessing(false);
   };
 
+  // 토큰 차감 헬퍼 — 해석 성공 후에만 호출
+  const deductToken = async () => {
+    try {
+      const deductRes = await fetch('/api/tokens/deduct', { method: 'POST' });
+      if (deductRes.ok) {
+        const d = await deductRes.json();
+        setTokenCount(d.balance);
+        if (d.isAdmin !== undefined) setIsAdmin(d.isAdmin);
+      } else if (deductRes.status === 402) {
+        // 잔액 부족은 이미 해석이 성공한 이후 — 로그만 남기고 계속
+        addLog("■ TOKEN_BALANCE: 0 — 다음 카드는 토큰을 충전 후 뽑을 수 있다.", "system");
+      }
+      // 401은 이미 해석 단계에서 차단됨
+    } catch {
+      setTokenCount(prev => Math.max(0, prev - 1));
+    }
+  };
+
   // ─────────────────────────────────────────────────────────
   // Card Draw — 다중 선택 배치 처리
   // deckIndices: 사용자가 선택한 덱 인덱스 배열 (선택 순서 = 포지션 순서)
@@ -632,28 +650,14 @@ export default function Terminal() {
       const drawn = drawCards(deckToUse, targetIndex, 1)[0];
       accDrawn = [...accDrawn, drawn];
 
-      // 토큰 차감 (카드 1장당)
-      try {
-        const deductRes = await fetch('/api/tokens/deduct', { method: 'POST' });
-        if (deductRes.ok) {
-          const d = await deductRes.json();
-          setTokenCount(d.balance);
-          if (d.isAdmin !== undefined) setIsAdmin(d.isAdmin);
-        } else if (deductRes.status === 402) {
-          addLog("■ TOKEN_BALANCE: 0 — 토큰이 부족하다. [T]로 충전하라.", "system");
-          setIsProcessing(false);
-          return;
-        }
-      } catch {
-        setTokenCount(prev => Math.max(0, prev - 1));
-      }
-
       const cardData = getCardById(drawn.id);
       const dirLabel = drawn.isReversed ? '[역방향]' : '[정방향]';
       addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
       addLog(`CARD #${String(drawn.id + 1).padStart(2, '0')} — ${cardData.nameKo} ${dirLabel}`, "system");
       addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
       await runDelay(200);
+
+      // ── 해석 먼저, 성공 시 토큰 차감 ──────────────────────────
 
       // TIMING 모드: AI 해석 (숫자 힌트 포함)
       if (readingPlan?.type === 'TIMING') {
@@ -662,6 +666,7 @@ export default function Terminal() {
           ? '이 카드의 숫자는 0 또는 무한대로, 시간 제한이 없음을 암시한다.'
           : `이 카드의 숫자는 ${timingNum}이다. ${timingNum}일, ${timingNum}주, ${timingNum}개월 중 맥락에 맞는 단위를 선택해 언급하라.`;
         addLog("✦ 오라클이 읽는다...", "system");
+        let readingSucceeded = false;
         try {
           const res = await fetch('/api/read', {
             method: 'POST',
@@ -680,29 +685,41 @@ export default function Terminal() {
               timingHint,
             }),
           });
+          if (res.status === 401) {
+            addLog("■ SESSION_EXPIRED — 세션이 만료되었다. 다시 로그인하라. (/logout 입력)", "system");
+            setIsProcessing(false);
+            return;
+          }
           const readingData = await res.json();
-          const reading: string = readingData.reading ?? '"시간은 카드가 말해주지 않는다."';
-
-          addLog(`✦ 타이밍`, "system");
-          addLog(`   "언제 가능한가"`, "system");
-          reading.split('\n').filter(l => l.trim()).forEach(line => addLog(line, "system"));
-          addLog("- - - - - - - - - - - - - - - -", "separator", false);
-
-          accReadings = [...accReadings, {
-            positionName: '타이밍', positionQuestion: '언제 가능한가',
-            cardNum: drawn.id + 1, cardNameKo: cardData.nameKo,
-            isReversed: drawn.isReversed, reading,
-          }];
+          const reading: string = readingData.reading ?? '';
+          if (!reading) {
+            addLog("■ 오라클 회선 불안정. 토큰은 차감되지 않았다. 잠시 후 다시 시도하라.", "system");
+          } else {
+            readingSucceeded = true;
+            addLog(`✦ 타이밍`, "system");
+            addLog(`   "언제 가능한가"`, "system");
+            reading.split('\n').filter(l => l.trim()).forEach(line => addLog(line, "system"));
+            addLog("- - - - - - - - - - - - - - - -", "separator", false);
+            accReadings = [...accReadings, {
+              positionName: '타이밍', positionQuestion: '언제 가능한가',
+              cardNum: drawn.id + 1, cardNameKo: cardData.nameKo,
+              isReversed: drawn.isReversed, reading,
+            }];
+          }
         } catch {
-          addLog("■ 오라클 회선 불안정. 잠시 후 다시 시도하라.", "system");
+          addLog("■ 오라클 회선 불안정. 토큰은 차감되지 않았다. 잠시 후 다시 시도하라.", "system");
         }
-        newSessionCount += 1;
+        if (readingSucceeded) {
+          await deductToken();
+          newSessionCount += 1;
+        }
         await runDelay(300);
         continue;
       }
 
-      // 해석 API 호출
+      // 일반 QUESTION / FLOW 해석
       addLog("✦ 오라클이 읽는다...", "system");
+      let readingSucceeded = false;
       try {
         const res = await fetch('/api/read', {
           method: 'POST',
@@ -720,28 +737,36 @@ export default function Terminal() {
             questionContext: questionContext.join(' / '),
           }),
         });
+        if (res.status === 401) {
+          addLog("■ SESSION_EXPIRED — 세션이 만료되었다. 다시 로그인하라. (/logout 입력)", "system");
+          setIsProcessing(false);
+          return;
+        }
         const readingData = await res.json();
-        const reading: string = readingData.reading ?? '"카드는 침묵한다."\n오라클 회선이 불안정하다.';
-
-        // 터미널 로그로 직접 출력
-        addLog(`✦ ${position.name}`, "system");
-        addLog(`   "${position.question}"`, "system");
-        reading.split('\n').filter(l => l.trim()).forEach(line => addLog(line, "system"));
-        addLog("- - - - - - - - - - - - - - - -", "separator", false);
-
-        const result: CardReadingResult = {
-          positionName: position.name,
-          positionQuestion: position.question,
-          cardNum: drawn.id + 1,
-          cardNameKo: cardData.nameKo,
-          isReversed: drawn.isReversed,
-          reading,
-        };
-        accReadings = [...accReadings, result];
-
-        newSessionCount += 1;
+        const reading: string = readingData.reading ?? '';
+        if (!reading) {
+          addLog("■ 오라클 회선 불안정. 토큰은 차감되지 않았다. 잠시 후 다시 시도하라.", "system");
+        } else {
+          readingSucceeded = true;
+          addLog(`✦ ${position.name}`, "system");
+          addLog(`   "${position.question}"`, "system");
+          reading.split('\n').filter(l => l.trim()).forEach(line => addLog(line, "system"));
+          addLog("- - - - - - - - - - - - - - - -", "separator", false);
+          accReadings = [...accReadings, {
+            positionName: position.name,
+            positionQuestion: position.question,
+            cardNum: drawn.id + 1,
+            cardNameKo: cardData.nameKo,
+            isReversed: drawn.isReversed,
+            reading,
+          }];
+        }
       } catch {
-        addLog("■ 오라클 회선 불안정. 잠시 후 다시 시도하라.", "system");
+        addLog("■ 오라클 회선 불안정. 토큰은 차감되지 않았다. 잠시 후 다시 시도하라.", "system");
+      }
+      if (readingSucceeded) {
+        await deductToken();
+        newSessionCount += 1;
       }
 
       await runDelay(300);
