@@ -462,11 +462,14 @@ export default function Terminal() {
         await runDelay(300);
 
         if (plan.type === 'TIMING') {
-          // TIMING: 바로 카드 1장 뽑기로 진행
+          // TIMING: confirm_plan 거쳐서 진행
           addLog("■ [TIMING_MODE] :: 타이밍 리딩 — 카드 1장", "system");
           await runDelay(200);
-          addLog("카드 1장을 골라라.", "system");
-          await processPlanConfirmation(plan);
+          renderReadingPlan(plan);
+          await runDelay(400);
+          addLog("이대로 진행하려면 [엔터] 또는 Y", "system");
+          addLog("취소: N", "system");
+          setStep('confirm_plan');
         } else if (plan.type === 'FLOW') {
           // FLOW: 포지션 목록 대신 카드 수 + 시간단위 설정 화면으로 이동
           const unit = plan.timeUnit ?? '주';
