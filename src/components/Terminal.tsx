@@ -149,6 +149,8 @@ export default function Terminal() {
   const [pendingPackageId, setPendingPackageId] = useState<number | null>(null); // 선택 중인 토큰 패키지
   const [pendingEmail, setPendingEmail] = useState<string>(''); // 이메일 로그인 중 임시 저장
   const [loginMode, setLoginMode] = useState<'login' | 'signup'>('login'); // 이메일 로그인/가입 모드
+  const [pendingReshuffleCtx, setPendingReshuffleCtx] = useState<{ context: string[]; ownerFlag: boolean } | null>(null);
+  const [readingSessionSummary, setReadingSessionSummary] = useState<string>(''); // 이번 세션 리딩 누적 요약 (덱 리셋에도 유지)
 
   const currentOptions = step === 'login' ? LOGIN_OPTIONS : [];
 
@@ -441,7 +443,7 @@ export default function Terminal() {
   // Question → Analysis → Plan Confirm
   // ─────────────────────────────────────────────────────────
 
-  const processAnalysis = async (context: string[], ownerFlag: boolean) => {
+  const processAnalysis = async (context: string[], ownerFlag: boolean, skipNewSpreadCheck = false) => {
     setStep('analyzing');
     setIsProcessing(true);
     addLog("■ 질문 패턴 분석 중...", "system");
@@ -455,12 +457,27 @@ export default function Terminal() {
           currentInput: context[context.length - 1],
           context: context.slice(0, -1),
           isOwner: ownerFlag,
+          prevTopicContext: (!skipNewSpreadCheck && sessionCount > 0 && questionContext.length <= 1)
+            ? prevTopicContext
+            : '',
+          sessionContext: readingSessionSummary,
         }),
       });
       const data = await res.json();
       const aiText: string = data.analysis || '';
 
       const plan = parseReadingPlan(aiText);
+
+      if (aiText.trim() === 'NEW_SPREAD') {
+        // AI가 새 덱이 필요하다고 판단
+        setPendingReshuffleCtx({ context, ownerFlag });
+        addLog("■ 지금의 이야기는 여기서 닫힌다.", "system");
+        addLog("새로운 주제를 위해 덱을 다시 섞어야 한다.", "system");
+        addLog("이대로 진행하겠는가?  Y: 계속   N: 현재 이야기 유지", "system");
+        setStep('confirm_new_topic');
+        setIsProcessing(false);
+        return;
+      }
 
       if (aiText.trimStart().startsWith('CONFIRM')) {
         // 본인 확인 후 — AI 추론 컨텍스트 확인 단계
@@ -663,8 +680,8 @@ export default function Terminal() {
       if (readingPlan?.type === 'TIMING') {
         const timingNum = getTimingNumber(drawn.id);
         const timingHint = timingNum === 0
-          ? '이 카드의 숫자는 0 또는 무한대로, 시간 제한이 없음을 암시한다.'
-          : `이 카드의 숫자는 ${timingNum}이다. ${timingNum}일, ${timingNum}주, ${timingNum}개월 중 맥락에 맞는 단위를 선택해 언급하라.`;
+          ? `이 카드의 숫자는 0 또는 무한대다. 선고 첫 줄을 반드시 "기약 없다." 또는 "때가 되면 온다." 형태로 시작하라.`
+          : `이 카드의 숫자는 ${timingNum}이다. 질문 맥락을 보고 ${timingNum}일 / ${timingNum}주 / ${timingNum}개월 중 하나를 골라 선고 첫 줄을 반드시 "${timingNum}일이다." / "${timingNum}주다." / "${timingNum}개월이다." 형태로 시작하라. 숫자를 생략하거나 범위로 말하지 마라.`;
         addLog("✦ 오라클이 읽는다...", "system");
         let readingSucceeded = false;
         try {
@@ -681,7 +698,7 @@ export default function Terminal() {
                 reversedKeywords: cardData.reversedKeywords,
               },
               position: { name: '타이밍', question: '언제 가능한가' },
-              questionContext: questionContext.join(' / '),
+              questionContext: [readingSessionSummary, questionContext.join(' / ')].filter(Boolean).join('\n'),
               timingHint,
             }),
           });
@@ -712,6 +729,11 @@ export default function Terminal() {
         if (readingSucceeded) {
           await deductToken();
           newSessionCount += 1;
+          const latestReading = accReadings[accReadings.length - 1];
+          const firstLine = latestReading.reading.split('\n').find(l => l.trim()) ?? '';
+          setReadingSessionSummary(prev =>
+            `${prev ? prev + '\n' : ''}[타이밍] ${questionContext.join(' ')} → ${cardData.nameKo}(${drawn.isReversed ? '역방향' : '정방향'}): ${firstLine}`
+          );
         }
         await runDelay(300);
         continue;
@@ -734,7 +756,7 @@ export default function Terminal() {
               reversedKeywords: cardData.reversedKeywords,
             },
             position,
-            questionContext: questionContext.join(' / '),
+            questionContext: [readingSessionSummary, questionContext.join(' / ')].filter(Boolean).join('\n'),
           }),
         });
         if (res.status === 401) {
@@ -767,6 +789,11 @@ export default function Terminal() {
       if (readingSucceeded) {
         await deductToken();
         newSessionCount += 1;
+        const latestReading = accReadings[accReadings.length - 1];
+        const firstLine = latestReading.reading.split('\n').find(l => l.trim()) ?? '';
+        setReadingSessionSummary(prev =>
+          `${prev ? prev + '\n' : ''}[${latestReading.positionName}] ${questionContext.join(' ')} → ${cardData.nameKo}(${drawn.isReversed ? '역방향' : '정방향'}): ${firstLine}`
+        );
       }
 
       await runDelay(300);
@@ -894,6 +921,7 @@ export default function Terminal() {
     setReadingPlan(null);
     setQuestionContext([]);
     setQuestionAttempts(0);
+    setReadingSessionSummary('');
     setShuffleTopCard(shuffled[0]);
     addLog("■ 새 세션. 덱을 초기화한다.", "system");
     await waitForShuffleAnimation();
@@ -980,6 +1008,7 @@ export default function Terminal() {
       setDeckIndex(0);
       setSessionCount(0);
       setCopySnapshot(null);
+      setReadingSessionSummary('');
       runBootSequence();
       return;
     }
@@ -1414,47 +1443,6 @@ export default function Terminal() {
     if (step === 'ask_question') {
       // 주제 일관성 감지: 이전 리딩이 있고(sessionCount > 0), 새 질문이 시작되는 시점(questionContext 비어있음)에만 체크
       // 명시적 새 주제 의도 OR 카테고리가 다른 주제로 판단될 때 확인 요청
-      const detectTopicChange = (prevCtx: string, newInput: string): boolean => {
-        if (!prevCtx) return false;
-        const topicGroups: RegExp[] = [
-          /연애|연인|사랑|이별|재회|짝사랑|고백|남친|여친|남자친구|여자친구|썸|헤어|사귀|연애운|사랑운/,
-          /이직|취업|직장|커리어|업무|회사|직업|취준|퇴사|입사|면접|일자리|직장운|취업운/,
-          /건강|몸|아프|병원|치료|다이어트|체중|수술|건강운/,
-          /가족|부모|엄마|아빠|형제|자매|부모님|남편|아내|배우자/,
-          /돈|재정|투자|부업|수입|적금|주식|빚|대출|자산|금전운|재물운/,
-          /친구|인간관계|갈등|관계|지인|동료|상사/,
-          /학업|공부|시험|학교|수능|입시|대학|학업운/,
-          /여행|이사|해외|유학|이민/,
-          /창업|사업|프리랜서|독립/,
-        ];
-        const getCategories = (text: string) =>
-          topicGroups.reduce<number[]>((acc, re, i) => re.test(text) ? [...acc, i] : acc, []);
-
-        const prevCats = getCategories(prevCtx);
-        const newCats = getCategories(newInput);
-        // 새 질문에 카테고리가 없으면 꼬리질문으로 간주 (변경 없음)
-        if (newCats.length === 0) return false;
-        // 새 질문의 카테고리가 이전 맥락에 없으면 주제 변경
-        // (이전이 미분류여도 새 주제가 명확하면 변경으로 판단)
-        return !newCats.some(c => prevCats.includes(c));
-      };
-
-      // 명시적 새 주제 키워드 감지
-      const hasExplicitNewTopicKeyword = (s: string) =>
-        /새\s*질문|다른\s*이야기|다른\s*주제|새\s*주제|다른\s*고민|처음부터|다시\s*시작|새로\s*시작/.test(s.trim().toLowerCase());
-
-      if (sessionCount > 0 && questionContext.length === 0) {
-        const isChanged = hasExplicitNewTopicKeyword(input) || detectTopicChange(prevTopicContext, input);
-        if (isChanged) {
-          // 새 셔플 필요 — 확인 요청
-          addLog("■ 지금의 이야기는 여기서 닫힌다.", "system");
-          addLog("새로운 주제를 위해 덱을 다시 섞어야 한다.", "system");
-          addLog("이대로 진행하겠는가?  Y: 계속   N: 현재 이야기 유지", "system");
-          setStep('confirm_new_topic');
-          return;
-        }
-      }
-
       const updated = [...questionContext, input];
       setQuestionContext(updated);
       const isFollowUp = questionContext.length > 0;
@@ -1468,11 +1456,11 @@ export default function Terminal() {
       }
     }
 
-    // confirm_new_topic — 새 주제 전환 확인
+    // confirm_new_topic — 새 주제 전환 확인 (AI가 NEW_SPREAD 판단 후 진입)
     if (step === 'confirm_new_topic') {
       addLog(input, 'user');
       if (isYes(input)) {
-        // 전체 리셋
+        // 전체 리셋 후 저장된 질문으로 바로 진행 (재입력 불필요)
         setCurrentDeck([]);
         setDeckIndex(0);
         setSessionCount(0);
@@ -1484,13 +1472,30 @@ export default function Terminal() {
         setQuestionAttempts(0);
         setIdentityConfirmed(false);
         setCopySnapshot(null);
+        setPrevTopicContext('');
         addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
-        addLog("■ 덱을 초기화한다. 새로운 이야기를 입력하라.", "system");
-        setQuestionContext([]);
-        setStep('ask_question');
+        addLog("■ 덱을 초기화한다.", "system");
+        if (pendingReshuffleCtx) {
+          const newCtx = [pendingReshuffleCtx.context[pendingReshuffleCtx.context.length - 1]];
+          setQuestionContext(newCtx);
+          setPendingReshuffleCtx(null);
+          // skipNewSpreadCheck=true: 방금 리셋했으므로 NEW_SPREAD 재감지 불필요
+          await processAnalysis(newCtx, pendingReshuffleCtx.ownerFlag, true);
+        } else {
+          setQuestionContext([]);
+          setStep('ask_question');
+        }
       } else if (isNo(input)) {
-        addLog("■ 현재 이야기를 계속한다. 꼬리질문을 입력하라.", "system");
-        setStep('ask_question');
+        // 현재 덱 유지 — 저장된 질문을 꼬리질문으로 처리
+        addLog("■ 현재 이야기를 계속한다.", "system");
+        if (pendingReshuffleCtx) {
+          const ctx = pendingReshuffleCtx.context;
+          setQuestionContext(ctx);
+          setPendingReshuffleCtx(null);
+          await processAnalysis(ctx, pendingReshuffleCtx.ownerFlag, true);
+        } else {
+          setStep('ask_question');
+        }
       } else {
         addLog("■ Y 또는 N을 입력하라.", "system");
       }

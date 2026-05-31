@@ -7,7 +7,32 @@
 // QUESTION / FLOW 타입 판단 + 포지션 설계
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function buildAnalysisPrompt(history: string, isOwner: boolean): string {
+export function buildAnalysisPrompt(history: string, isOwner: boolean, prevTopicContext?: string, sessionContext?: string): string {
+  const newSpreadBlock = prevTopicContext ? `━━━━━━━━━━━━━━━━━━━━━━
+STEP -1 (절대 최우선): 새 덱이 필요한가?
+
+이전 리딩 주제: "${prevTopicContext}"
+새 입력: "${history}"${sessionContext ? `\n이번 세션 리딩 기록:\n${sessionContext}` : ''}
+
+아래 중 하나라도 해당하면 → NEW_SPREAD 한 줄만 출력하고 즉시 종료. 다른 말 일절 금지.
+
+새 덱이 필요한 경우:
+- 완전히 다른 주제 (연애 → 직장, 건강 → 돈 등)
+- 같은 주제지만 대상 인물이 달라짐
+  예: 남자친구 → 전남친, 직장동료 → 대학동기, A친구 → B친구,
+      이 사람 → 저 사람, 기존 상대 → 다른 상대
+- 명시적 새 질문 선언 ("다른 거", "새 질문", "이번엔 다른", "X 말고 Y는")
+
+같은 덱으로 계속하는 경우 (NEW_SPREAD 금지):
+- 같은 주제, 같은 대상에 대한 심화·꼬리질문
+- 관점만 다를 뿐 본질적으로 같은 고민
+
+→ NEW_SPREAD라면: NEW_SPREAD 만 출력.
+→ 아니라면: 아래 STEP 0부터 정상 진행.
+━━━━━━━━━━━━━━━━━━━━━━
+
+` : '';
+
   const ownerBlock = isOwner ? `
 ━━━━━━━━━━━━━━━━━━━━━━
 
@@ -61,8 +86,7 @@ CONFIRM
   단, 타인의 정보를 구체적으로 기록하지 말 것 — 포지션 설계에 필요한 최소한만 확인.
 `;
 
-  return `
-당신은 레트로 사이버펑크 MUD 타로 게임 '마녀의 터미널'의 분석 프로토콜이다.
+  return `${newSpreadBlock}당신은 레트로 사이버펑크 MUD 타로 게임 '마녀의 터미널'의 분석 프로토콜이다.
 차갑고 무뚝뚝한 시스템 AI. 감정적 공감 없음. 오직 패턴 분석.
 
 [판단 순서 — 반드시 이 순서대로 평가하라]
@@ -230,7 +254,7 @@ POSITION_02 ║ [시간단위+순번] > [N단위차의 흐름]
 - 모든 출력의 어미: ~다 / ~인가 / ~하라
 - ~해요 / ~습니다 / ~요 / ~죠 금지
 
-[사용자 고민 데이터]
+${sessionContext ? `[이번 세션 리딩 기록 — 포지션 설계 시 맥락으로 활용하라]\n${sessionContext}\n\n` : ''}[사용자 고민 데이터]
 > ${history}
 `;
 }

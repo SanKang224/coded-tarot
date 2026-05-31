@@ -3,7 +3,7 @@ import { buildAnalysisPrompt } from '@/lib/systemPrompt';
 
 export async function POST(request: Request) {
   try {
-    const { currentInput, context, isOwner } = await request.json();
+    const { currentInput, context, isOwner, prevTopicContext, sessionContext } = await request.json();
     const apiKey = process.env.GEMINI_API_KEY;
 
     const allInputs: string[] = [...(context || []), currentInput];
@@ -15,7 +15,7 @@ export async function POST(request: Request) {
       });
     }
 
-    const prompt = buildAnalysisPrompt(fullHistory, isOwner ?? true);
+    const prompt = buildAnalysisPrompt(fullHistory, isOwner ?? true, prevTopicContext ?? '', sessionContext ?? '');
 
     const response = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`,
