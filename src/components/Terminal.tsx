@@ -679,6 +679,12 @@ export default function Terminal() {
         const readingData = await res.json();
         const reading: string = readingData.reading ?? '"카드는 침묵한다."\n오라클 회선이 불안정하다.';
 
+        // 터미널 로그로 직접 출력
+        addLog(`✦ ${position.name}`, "system");
+        addLog(`   "${position.question}"`, "system");
+        reading.split('\n').filter(l => l.trim()).forEach(line => addLog(line, "system"));
+        addLog("- - - - - - - - - - - - - - - -", "separator", false);
+
         const result: CardReadingResult = {
           positionName: position.name,
           positionQuestion: position.question,
@@ -688,7 +694,6 @@ export default function Terminal() {
           reading,
         };
         accReadings = [...accReadings, result];
-        setCardReadings([...accReadings]);
 
         newSessionCount += 1;
       } catch {
@@ -1471,11 +1476,6 @@ export default function Terminal() {
         <div className="pt-4">
           <LogDisplay logs={logs} />
         </div>
-
-        {/* 카드 해석 결과 */}
-        {cardReadings.map((result, i) => (
-          <CardReading key={i} result={result} />
-        ))}
 
         {/* 셔플 애니메이션 */}
         {isShuffling && (

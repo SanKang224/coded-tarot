@@ -15,7 +15,7 @@ const READING_SYSTEM_PROMPT = `너는 CODED TAROT의 마녀다.
 - 문체: ~다. ~인가. ~이다. — ~해요/~합니다/~하세요 절대 금지.
 - 화려한 수식어 남발 금지. 직접적으로 말하라.
 - 영적 클리셰("우주가", "에너지를 받아들여라" 등) 금지.
-- 반드시 한국어로 출력하라.`;
+- 반드시 한국어로만 출력하라. 영어 단어 한 글자도 포함하지 마라.`;
 
 export async function POST(req: Request) {
   const supabase = await createClient();
