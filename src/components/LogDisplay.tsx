@@ -1,9 +1,14 @@
 import { useEffect, useState } from 'react';
 import { LogType } from '@/lib/useTerminalLog';
 
+const TERMINAL_FONT = 'var(--font-roboto-mono), var(--font-noto-sans-kr), "Courier New", monospace';
+
 export default function LogDisplay({ logs }: { logs: LogType[] }) {
   return (
-    <div className="flex flex-col gap-1 terminal-text font-mono text-[16px] leading-[1.8]">
+    <div
+      className="flex flex-col gap-1 terminal-text"
+      style={{ fontFamily: TERMINAL_FONT, fontSize: '16px', lineHeight: '1.8' }}
+    >
       {logs.map((log) => (
         <LogItem key={log.id} log={log} />
       ))}
