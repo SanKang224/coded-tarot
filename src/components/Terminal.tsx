@@ -1365,21 +1365,25 @@ export default function Terminal() {
       const detectTopicChange = (prevCtx: string, newInput: string): boolean => {
         if (!prevCtx) return false;
         const topicGroups: RegExp[] = [
-          /연애|연인|사랑|이별|재회|짝사랑|고백|남친|여친|남자친구|여자친구|썸|헤어|사귀/,
-          /이직|취업|직장|커리어|업무|회사|직업|취준|퇴사|입사|면접|일자리/,
-          /건강|몸|아프|병원|치료|다이어트|체중|수술/,
+          /연애|연인|사랑|이별|재회|짝사랑|고백|남친|여친|남자친구|여자친구|썸|헤어|사귀|연애운|사랑운/,
+          /이직|취업|직장|커리어|업무|회사|직업|취준|퇴사|입사|면접|일자리|직장운|취업운/,
+          /건강|몸|아프|병원|치료|다이어트|체중|수술|건강운/,
           /가족|부모|엄마|아빠|형제|자매|부모님|남편|아내|배우자/,
-          /돈|재정|투자|부업|수입|적금|주식|빚|대출|자산/,
+          /돈|재정|투자|부업|수입|적금|주식|빚|대출|자산|금전운|재물운/,
           /친구|인간관계|갈등|관계|지인|동료|상사/,
-          /학업|공부|시험|학교|수능|입시|대학/,
+          /학업|공부|시험|학교|수능|입시|대학|학업운/,
+          /여행|이사|해외|유학|이민/,
+          /창업|사업|프리랜서|독립/,
         ];
         const getCategories = (text: string) =>
           topicGroups.reduce<number[]>((acc, re, i) => re.test(text) ? [...acc, i] : acc, []);
 
         const prevCats = getCategories(prevCtx);
         const newCats = getCategories(newInput);
-        // 둘 다 카테고리가 명확하고 겹치지 않을 때만 주제 변경으로 판단
-        if (prevCats.length === 0 || newCats.length === 0) return false;
+        // 새 질문에 카테고리가 없으면 꼬리질문으로 간주 (변경 없음)
+        if (newCats.length === 0) return false;
+        // 새 질문의 카테고리가 이전 맥락에 없으면 주제 변경
+        // (이전이 미분류여도 새 주제가 명확하면 변경으로 판단)
         return !newCats.some(c => prevCats.includes(c));
       };
 
