@@ -3,7 +3,9 @@ import { createClient } from '@/lib/supabase-server';
 
 export async function POST(req: Request) {
   const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+
+  console.log('[/api/tokens/code] user:', user?.id ?? 'null', 'authError:', authError?.message ?? 'none');
 
   if (!user) {
     return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
@@ -15,15 +17,29 @@ export async function POST(req: Request) {
   }
 
   // 환경변수에서 코드 목록 파싱
+  const rawPromo = process.env.PROMO_CODES ?? '{}';
+  console.log('[/api/tokens/code] PROMO_CODES raw:', rawPromo);
   let promoCodes: Record<string, number> = {};
   try {
-    promoCodes = JSON.parse(process.env.PROMO_CODES ?? '{}');
+    promoCodes = JSON.parse(rawPromo);
+    console.log('[/api/tokens/code] parsed:', promoCodes, 'input code:', code.toUpperCase());
   } catch {
+    console.error('[/api/tokens/code] JSON parse failed:', rawPromo);
     return NextResponse.json({ error: 'SERVER_ERROR' }, { status: 500 });
   }
 
   const tokensToAdd = promoCodes[code.toUpperCase()];
   if (!tokensToAdd) {
+    return NextResponse.json({ error: 'INVALID_CODE' }, { status: 400 });
+  }
+
+  // 총 사용 횟수 확인 (코드별 100명 제한)
+  const { count } = await supabase
+    .from('code_redemptions')
+    .select('*', { count: 'exact', head: true })
+    .eq('code', code.toUpperCase());
+
+  if ((count ?? 0) >= 100) {
     return NextResponse.json({ error: 'INVALID_CODE' }, { status: 400 });
   }
 
