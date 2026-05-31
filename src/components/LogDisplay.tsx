@@ -42,10 +42,13 @@ function parseClickable(text: string): Segment[] {
 
     // 4. N. 숫자+점 (번호 선택지 — 숫자+점만 클릭, 뒤 텍스트는 plain)
     //    "1. 질문" → [1.][질문]
-    const numDotM = rest.match(/^([1-9]\.)/);
-    if (numDotM) {
-      segments.push({ text: numDotM[0], clickValue: numDotM[1][0] });
-      i += numDotM[0].length;
+    //    줄 맨 앞(i===0 또는 직전이 공백)이고 뒤에 공백이 오는 경우만 선택지로 인식
+    const numDotM = rest.match(/^([1-9]\.) /);
+    const prevIsSpace = i === 0 || text[i - 1] === ' ' || text[i - 1] === '\n';
+    if (numDotM && prevIsSpace) {
+      // 숫자+점만 버튼, 뒤 공백은 plain으로
+      segments.push({ text: numDotM[1], clickValue: numDotM[1][0] });
+      i += numDotM[1].length;
       continue;
     }
 

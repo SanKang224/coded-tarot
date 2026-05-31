@@ -11,8 +11,7 @@ CREATE TABLE IF NOT EXISTS public.payments (
   tokens_added integer NOT NULL,          -- 지급 토큰 수
   package_name text NOT NULL,             -- '소 (3토큰)' | '중 (15토큰)' | '대 (30토큰)'
   payment_key  text,                      -- Toss Payments paymentKey (검증용)
-  expires_at   timestamptz NOT NULL       -- created_at + 3년 (자동 계산)
-    GENERATED ALWAYS AS (created_at + INTERVAL '3 years') STORED
+  expires_at   timestamptz NOT NULL       -- insert 시 created_at + 3년으로 계산해서 삽입
 );
 
 -- RLS 활성화
@@ -39,6 +38,3 @@ CREATE INDEX IF NOT EXISTS payments_user_created
 --   '0 3 * * *',   -- 매일 새벽 3시
 --   $$ DELETE FROM public.payments WHERE expires_at < now(); $$
 -- );
-
--- Pro 플랜 이전 대안: 조회 시 WHERE expires_at > now() 필터로 만료 레코드 제외
--- (실제 삭제는 수동 또는 Toss Payments 연동 시점에 cron 설정)
