@@ -727,10 +727,9 @@ export default function Terminal() {
       addLog("복사 또는 /copy 입력 시 전체 결과를 클립보드로 추출할 수 있다.", "system");
       addLog("", "system", false);
       addLog("꼬리질문이 있으면 입력하라.", "system");
-      // 꼬리질문: 화면 카드 초기화 (copy 스냅샷은 누적 유지), context·plan 리셋
+      // 꼬리질문: context·plan 리셋 (cardReadings는 다음 뽑기 시작 시 초기화)
       // 주제 감지를 위해 현재 컨텍스트를 저장한 뒤 초기화
       setPrevTopicContext(questionContext.join(' '));
-      setCardReadings([]);
       setQuestionContext([]);
       setQuestionAttempts(0);
       setReadingPlan(null);

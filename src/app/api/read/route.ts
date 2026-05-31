@@ -58,7 +58,7 @@ export async function POST(req: Request) {
           contents: [{ parts: [{ text: fullPrompt }] }],
           generationConfig: {
             temperature: 0.85,
-            maxOutputTokens: 400,
+            maxOutputTokens: 800,
           },
         }),
       }
