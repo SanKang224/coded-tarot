@@ -34,7 +34,7 @@ type FlowStep =
   | 'confirm_flow_config' | 'ask_flow_period' | 'confirm_new_topic'
   | 'ready_to_draw' | 'card_draw'
   | 'token_shop' | 'token_shop_confirm'
-  | 'bag';
+  | 'bag' | 'confirm_end_session';
 
 const TOKEN_PACKAGES = [
   { id: 1, tokens: 3,  price: '990원' },
@@ -710,6 +710,7 @@ export default function Terminal() {
               position: { name: '타이밍', question: '언제 가능한가' },
               questionContext: [readingSessionSummary, questionContext.join(' / ')].filter(Boolean).join('\n'),
               timingHint,
+              readingType: readingPlan?.type,
             }),
           });
           if (res.status === 401) {
@@ -767,6 +768,7 @@ export default function Terminal() {
             },
             position,
             questionContext: [readingSessionSummary, questionContext.join(' / ')].filter(Boolean).join('\n'),
+            readingType: readingPlan?.type,
           }),
         });
         if (res.status === 401) {
@@ -1579,8 +1581,63 @@ export default function Terminal() {
       return;
     }
 
+    // confirm_end_session — 세션 종료 확인
+    if (step === 'confirm_end_session') {
+      addLog(input, 'user');
+      if (isYes(input)) {
+        addLog("세션을 종료한다.", "system");
+        await runDelay(300);
+        addLog("- - - - - - - - - - - - - - - -", "separator");
+        addLog("[Q] 질문   [T] 토큰   [B] 가방", "system");
+        setStep('main');
+      } else {
+        addLog("꼬리질문을 입력하라.", "system");
+        setStep('ask_question');
+      }
+      return;
+    }
+
     // ask_question — 꼬리질문이거나 이미 본인/타인 확인됐으면 바로 분석
     if (step === 'ask_question') {
+      // 결론 재요청 감지 — 이미 리딩이 있고 결론/요약을 묻는 경우 새 카드 없이 정리
+      const isConcludeIntent = (s: string) =>
+        /결론|그래서 뭐|그래서뭐|어쩌라|어쩌란|핵심이 뭐|한마디로|요약|정리해|정리 해|뭐가 답|뭐야 결국|결국 뭐|결국엔/.test(s);
+
+      // 꼬리질문 없음 감지 — 리딩 완료 후 종료 의사 표현 시 세션 종료 확인
+      const isNoFollowUp = (s: string) =>
+        /^(없어|없음|없다|괜찮아|괜찮음|됐어|됐다|그만|끝|아니|아니오|노|ㄴ|ㄴㄴ|no)$/i.test(s.trim());
+
+      if (isNoFollowUp(input) && sessionCount > 0 && questionContext.length === 0) {
+        addLog("세션을 종료하겠는가?", "system");
+        addLog("[Y] 메인으로   [N] 꼬리질문 입력", "system");
+        setStep('confirm_end_session');
+        return;
+      }
+
+      if (isConcludeIntent(input) && readingSessionSummary) {
+        setIsProcessing(true);
+        addLog("■ 카드가 이미 말했다. 다시 정리한다.", "system");
+        try {
+          const res = await fetch('/api/conclude', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              sessionSummary: readingSessionSummary,
+              questionContext: questionContext.join(' '),
+            }),
+          });
+          const data = await res.json();
+          const conclusion: string = data.conclusion ?? '카드는 이미 말했다.';
+          addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
+          conclusion.split('\n').filter(l => l.trim()).forEach(line => addLog(line, "system"));
+          addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
+        } catch {
+          addLog("■ 오라클 회선 불안정.", "system");
+        }
+        setIsProcessing(false);
+        return;
+      }
+
       // 주제 일관성 감지: 이전 리딩이 있고(sessionCount > 0), 새 질문이 시작되는 시점(questionContext 비어있음)에만 체크
       // 명시적 새 주제 의도 OR 카테고리가 다른 주제로 판단될 때 확인 요청
       const updated = [...questionContext, input];
@@ -1772,7 +1829,7 @@ export default function Terminal() {
             onSubmit={handleUserInput}
             onArrowKey={handleArrowKey}
             disabled={isProcessing}
-            allowEmpty={(['confirm_plan', 'confirm_flow_config', 'confirm_context', 'confirm_identity', 'ask_flow_period', 'confirm_new_topic', 'token_shop_confirm', 'login'] as FlowStep[]).includes(step)}
+            allowEmpty={(['confirm_plan', 'confirm_flow_config', 'confirm_context', 'confirm_identity', 'ask_flow_period', 'confirm_new_topic', 'token_shop_confirm', 'login', 'confirm_end_session'] as FlowStep[]).includes(step)}
           />
         </div>
       )}
