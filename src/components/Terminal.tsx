@@ -1508,7 +1508,7 @@ export default function Terminal() {
       const newContext = [input];
       setQuestionContext(newContext);
       addLog("■ 본인의 일인가, 타인의 일인가.", "system");
-      addLog("Y: 본인   N: 타인", "system");
+      addLog("[Y]: 본인   [N]: 타인", "system");
       setStep('confirm_identity');
       return;
     }
