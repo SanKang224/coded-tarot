@@ -4,7 +4,6 @@ import LogDisplay from './LogDisplay';
 import InputLine from './InputLine';
 import MenuSelector from './MenuSelector';
 import CardReading, { type CardReadingResult } from './CardReading';
-import CardGrid from './CardGrid';
 import { useTerminalLog } from '@/lib/useTerminalLog';
 import { type Card, type AlignmentAttempt, createFreshDeck, shuffleDeck, shuffleDeckWithAlignment, ALIGNMENT_MAX_RETRIES, drawCards } from '@/lib/shuffler';
 import { createClient } from '@/lib/supabase';
@@ -154,7 +153,6 @@ export default function Terminal() {
   const [pendingReshuffleCtx, setPendingReshuffleCtx] = useState<{ context: string[]; ownerFlag: boolean } | null>(null);
   const [readingSessionSummary, setReadingSessionSummary] = useState<string>(''); // 이번 세션 리딩 누적 요약 (덱 리셋에도 유지)
   const [choiceTexts, setChoiceTexts] = useState<{ opt1: string; opt2: string } | null>(null); // CHOICE 예시 텍스트 저장
-
   const currentOptions = step === 'login' ? LOGIN_OPTIONS : step === 'confirm_identity' ? ['Y', 'N'] : [];
 
   // ─────────────────────────────────────────────────────────
