@@ -58,7 +58,7 @@ export async function POST(req: Request) {
           contents: [{ parts: [{ text: fullPrompt }] }],
           generationConfig: {
             temperature: 0.85,
-            maxOutputTokens: 2048,
+            maxOutputTokens: 4096,
           },
         }),
       }
@@ -84,7 +84,11 @@ export async function POST(req: Request) {
 
     const reading = verdict ? `${verdict}\n${interpret}` : interpret;
 
-    return NextResponse.json({ reading });
+    const NEGATIVE_KEYWORDS = /역방향|경고|위험|조심|막힘|막혀|장애|방해|혼란|갈등|손실|실패|지연|후회|두려움|불안|혼돈|파국|붕괴|집착|망상|배신|고통|상실|단절/;
+    const isNegative = card.isReversed || NEGATIVE_KEYWORDS.test(reading);
+
+return NextResponse.json({ reading, isNegative });
+
   } catch (error) {
     console.error('[/api/read]', error);
     return NextResponse.json({
