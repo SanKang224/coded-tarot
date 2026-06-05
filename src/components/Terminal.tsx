@@ -730,6 +730,7 @@ export default function Terminal() {
             const remainingDraws = 15 - (newSessionCount + 1);
             if (isNegativeReading && remainingDraws > 0) {
               addLog("대응 가능한 궤적이다. 개입 여지가 있다. [조언]", "system");
+            }
             addLog("- - - - - - - - - - - - - - - -", "separator", false);
             accReadings = [...accReadings, {
               positionName: '타이밍', positionQuestion: '언제 가능한가',
