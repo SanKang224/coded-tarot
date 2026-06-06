@@ -37,7 +37,7 @@ export default function CardReading({ result, onComplete }: CardReadingProps) {
 
   useEffect(() => {
     setVisibleCount(0);
-  }, [result]);
+  }, [result.cardNum]);
 
   useEffect(() => {
     if (visibleCount >= lines.length) {

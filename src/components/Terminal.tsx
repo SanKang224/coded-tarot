@@ -4,12 +4,12 @@ import LogDisplay from './LogDisplay';
 import InputLine from './InputLine';
 import MenuSelector from './MenuSelector';
 import CardReading, { type CardReadingResult } from './CardReading';
-import CardGrid from './CardGrid';
 import { useTerminalLog } from '@/lib/useTerminalLog';
 import { type Card, type AlignmentAttempt, createFreshDeck, shuffleDeck, shuffleDeckWithAlignment, ALIGNMENT_MAX_RETRIES, drawCards } from '@/lib/shuffler';
 import { createClient } from '@/lib/supabase';
 import ShuffleOverlay from './ShuffleOverlay';
 import { getCardById } from '@/lib/tarotData';
+import CardGrid from './CardGrid';
 
 // ─────────────────────────────────────────────────────────
 // Types
@@ -153,8 +153,7 @@ export default function Terminal() {
   const [pendingReshuffleCtx, setPendingReshuffleCtx] = useState<{ context: string[]; ownerFlag: boolean } | null>(null);
   const [readingSessionSummary, setReadingSessionSummary] = useState<string>(''); // 이번 세션 리딩 누적 요약 (덱 리셋에도 유지)
   const [choiceTexts, setChoiceTexts] = useState<{ opt1: string; opt2: string } | null>(null); // CHOICE 예시 텍스트 저장
-
-  const currentOptions = step === 'login' ? LOGIN_OPTIONS : [];
+  const currentOptions = step === 'login' ? LOGIN_OPTIONS : step === 'confirm_identity' ? ['Y', 'N'] : [];
 
   // ─────────────────────────────────────────────────────────
   // Shuffle helpers
@@ -785,6 +784,7 @@ export default function Terminal() {
           }
           const readingData = await res.json();
           const reading: string = readingData.reading ?? '';
+          const isNegativeReading: boolean = readingData.isNegative ?? drawn.isReversed;
           if (!reading) {
             addLog("■ 오라클 회선 불안정. 토큰은 차감되지 않았다. 잠시 후 다시 시도하라.", "system");
           } else {
@@ -792,6 +792,10 @@ export default function Terminal() {
             addLog(`✦ 타이밍`, "system");
             addLog(`   "언제 가능한가"`, "system");
             reading.split('\n').filter(l => l.trim()).forEach(line => addLog(line, "system"));
+            const remainingDraws = 15 - (newSessionCount + 1);
+            if (isNegativeReading && remainingDraws > 0) {
+              addLog("대응 가능한 궤적이다. 개입 여지가 있다. [조언]", "system");
+            }
             addLog("- - - - - - - - - - - - - - - -", "separator", false);
             accReadings = [...accReadings, {
               positionName: '타이밍', positionQuestion: '언제 가능한가',
@@ -850,6 +854,11 @@ export default function Terminal() {
           addLog(`✦ ${position.name}`, "system");
           addLog(`   "${position.question}"`, "system");
           reading.split('\n').filter(l => l.trim()).forEach(line => addLog(line, "system"));
+          const isNegativeReading: boolean = readingData.isNegative ?? drawn.isReversed;
+          const remainingDraws = 15 - (newSessionCount + 1);
+          if (isNegativeReading && remainingDraws > 0) {
+            addLog("대응 가능한 궤적이다. 개입 여지가 있다. [조언]", "system");
+          }
           addLog("- - - - - - - - - - - - - - - -", "separator", false);
           accReadings = [...accReadings, {
             positionName: position.name,
@@ -1171,7 +1180,12 @@ export default function Terminal() {
       await showTokenShop();
       return;
     }
-
+  if (input === '__advice__') {
+  addLog("조언을 구한다.", 'user');
+  addLog("어떤 방향의 조언이 필요한가. 구체적으로 입력하라.", "system");
+  if (step !== 'ask_question') setStep('ask_question');
+  return;
+}
     // /menu — 어느 단계에서든 메인으로 복귀 (인증 전·메인 제외)
     const menuSteps: FlowStep[] = [...authSteps, 'main'];
     const isMenuIntent = (s: string) => /^\/menu$|^\/main$|^\/back$/i.test(s.trim());
@@ -1911,13 +1925,21 @@ export default function Terminal() {
         )}
 
         {/* 로그인 메뉴 */}
-        {step === 'login' && !isProcessing && (
-          <MenuSelector
-            options={currentOptions}
-            selectedIndex={menuIndex}
-            onSelect={(opt) => { addLog(opt, 'user'); processLoginFlow(opt); }}
-          />
-        )}
+       {(step === 'login' || step === 'confirm_identity') && !isProcessing && (
+         <MenuSelector
+         options={currentOptions}
+         selectedIndex={menuIndex}
+         onSelect={(opt) => {
+          if (step === 'login') {
+             addLog(opt, 'user');
+              processLoginFlow(opt);
+             } else {
+              handleUserInput(opt);
+      }
+    }}
+  />
+)}
+
 
         <div ref={bottomRef} className="h-4 shrink-0" />
       </div>
