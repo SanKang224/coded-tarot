@@ -851,10 +851,11 @@ export default function Terminal() {
             readingSucceeded = true;
             addLog(`✦ 타이밍`, "system");
             addLog(`   "언제 가능한가"`, "system");
-            reading.split('\n').filter(l => l.trim()).forEach(line => addLog(line, "system"));
+            reading.split('\n').filter(l => l.trim()).map(l => l.replace(/\[조언\]/g, '').trim()).filter(Boolean).forEach(line => addLog(line, "system"));
             const remainingDraws = 15 - (newSessionCount + 1);
             if (isNegativeReading && remainingDraws > 0) {
-              addLog("대응 가능한 궤적이다. 개입 여지가 있다. [조언]", "system");
+              addLog("대응 가능한 궤적이다. 개입 여지가 있다.", "system");
+              addLog("[조언]", "system");
             }
             addLog("- - - - - - - - - - - - - - - -", "separator", false);
             accReadings = [...accReadings, {
@@ -913,12 +914,7 @@ export default function Terminal() {
           readingSucceeded = true;
           addLog(`✦ ${position.name}`, "system");
           addLog(`   "${position.question}"`, "system");
-          reading.split('\n').filter(l => l.trim()).forEach(line => addLog(line, "system"));
-          const isNegativeReading: boolean = readingData.isNegative ?? drawn.isReversed;
-          const remainingDraws = 15 - (newSessionCount + 1);
-          if (isNegativeReading && remainingDraws > 0) {
-            addLog("대응 가능한 궤적이다. 개입 여지가 있다. [조언]", "system");
-          }
+          reading.split('\n').filter(l => l.trim()).map(l => l.replace(/\[조언\]/g, '').trim()).filter(Boolean).forEach(line => addLog(line, "system"));
           addLog("- - - - - - - - - - - - - - - -", "separator", false);
           accReadings = [...accReadings, {
             positionName: position.name,
@@ -1020,7 +1016,7 @@ export default function Terminal() {
       addLog(`>> 잔여 드로우 ${15 - newSessionCount}/15`, "system");
       addLog("복사 또는 /copy 입력 시 전체 결과를 클립보드로 추출할 수 있다.", "system");
       addLog("", "system", false);
-      addLog("꼬리질문이 있으면 입력하라.", "system");
+      addLog("[조언]   꼬리질문이 있으면 입력하라.", "system");
       // 꼬리질문: context·plan 리셋 (cardReadings는 다음 뽑기 시작 시 초기화)
       // 주제 감지를 위해 현재 컨텍스트를 저장한 뒤 초기화
       setPrevTopicContext(questionContext.join(' '));

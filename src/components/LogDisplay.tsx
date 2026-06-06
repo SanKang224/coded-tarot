@@ -54,6 +54,14 @@ function parseClickable(text: string): Segment[] {
   while (i < text.length) {
     const rest = text.slice(i);
 
+    // [조언] — 한국어 특수 버튼
+    const adviceM = rest.match(/^\[조언\]/);
+    if (adviceM) {
+      segments.push({ text: adviceM[0], clickValue: '이 상황에서 나에게 조언을 해줘' });
+      i += adviceM[0].length;
+      continue;
+    }
+
     const enterM = rest.match(/^\[엔터\](?:\/Y)?/);
     if (enterM) {
       segments.push({ text: enterM[0], clickValue: '' });
