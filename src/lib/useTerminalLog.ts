@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 export type LogType = {
   id: string;
   text: string;
-  type: 'system' | 'user' | 'separator';
+  type: 'system' | 'user' | 'separator' | 'witch';
   isTyping?: boolean;
 };
 
@@ -54,7 +54,7 @@ export function useTerminalLog() {
       id: crypto.randomUUID(),
       text,
       type,
-      isTyping: type === 'system' && animate
+      isTyping: (type === 'system' || type === 'witch') && animate
     }]);
   };
 

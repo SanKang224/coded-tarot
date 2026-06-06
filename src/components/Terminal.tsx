@@ -117,6 +117,13 @@ export default function Terminal() {
   const { logs, addLog, clearLogs, isLoaded } = useTerminalLog();
   const [step, setStep] = useState<FlowStep>('boot');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [skipTyping, setSkipTyping] = useState(false);
+
+  // 타이핑 애니메이션 스킵 트리거 — Enter/탭/클릭 시 호출
+  const triggerSkipTyping = () => {
+    setSkipTyping(true);
+    setTimeout(() => setSkipTyping(false), 100);
+  };
   const [menuIndex, setMenuIndex] = useState(0);
   const bottomRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -245,31 +252,31 @@ export default function Terminal() {
     const greeting = greetings[Math.floor(Math.random() * greetings.length)];
 
     addLog("- - - - - - - - - - - - - - - -", "separator");
-    await runDelay(300);
+    await runDelay(150);
     addLog(`>> SIGNAL_DETECTED :: INITIATING_HANDSHAKE...`, "system");
-    await runDelay(800);
-    addLog(`>> REROUTING: ${rndIp()} → ${rndIp()} → ${rndIp()}`, "system");
-    await runDelay(900);
-    addLog(`>> BYPASS_01: PROXY_CHAIN_ALPHA...`, "system");
-    await runDelay(1000);
-    addLog(`   └ [OK]`, "system");
-    await runDelay(500);
-    addLog(`>> BYPASS_02: FIREWALL_SECTOR_4F...`, "system");
-    await runDelay(1200);
-    addLog(`   └ [OK]`, "system");
-    await runDelay(500);
-    addLog(`>> BYPASS_03: DARK_RELAY_NODE — ENCRYPTED...`, "system");
-    await runDelay(1400);
-    addLog(`   └ [OK]`, "system");
-    await runDelay(600);
-    addLog(`>> LOCATION: UNRESOLVABLE — SIGNAL_MASKED`, "system");
-    await runDelay(500);
-    addLog(`>> WARNING: 이 연결은 기록되지 않는다.`, "system");
-    await runDelay(800);
-    addLog("- - - - - - - - - - - - - - - -", "separator");
     await runDelay(400);
-    addLog(greeting, "system");
+    addLog(`>> REROUTING: ${rndIp()} → ${rndIp()} → ${rndIp()}`, "system");
+    await runDelay(450);
+    addLog(`>> BYPASS_01: PROXY_CHAIN_ALPHA...`, "system");
     await runDelay(500);
+    addLog(`   └ [OK]`, "system");
+    await runDelay(250);
+    addLog(`>> BYPASS_02: FIREWALL_SECTOR_4F...`, "system");
+    await runDelay(600);
+    addLog(`   └ [OK]`, "system");
+    await runDelay(250);
+    addLog(`>> BYPASS_03: DARK_RELAY_NODE — ENCRYPTED...`, "system");
+    await runDelay(700);
+    addLog(`   └ [OK]`, "system");
+    await runDelay(300);
+    addLog(`>> LOCATION: UNRESOLVABLE — SIGNAL_MASKED`, "system");
+    await runDelay(250);
+    addLog(`>> WARNING: 이 연결은 기록되지 않는다.`, "system");
+    await runDelay(400);
+    addLog("- - - - - - - - - - - - - - - -", "separator");
+    await runDelay(200);
+    addLog(greeting, "system");
+    await runDelay(250);
   };
 
   const logAlignmentAttempts = async (attempts: AlignmentAttempt[]) => {
@@ -338,18 +345,58 @@ export default function Terminal() {
   const showMainMenu = async (isNewUser: boolean) => {
     if (isNewUser) {
       addLog("- - - - - - - - - - - - - - - -", "separator", false);
-      addLog("처음이군.", "system");
+      await runDelay(400);
+      addLog("[ 사적기록 // 열람불가 // 강제재생 ]", "witch", false);
+      await runDelay(700);
+      addLog("나는 오래 관찰해왔다.", "witch");
+      await runDelay(600);
+      addLog("인간은 선해지려 할수록", "witch");
+      await runDelay(350);
+      addLog("욕망을 더 깊이 숨긴다.", "witch");
+      await runDelay(700);
+      addLog("숨긴 것은 썩지 않는다.", "witch");
+      await runDelay(400);
+      addLog("농축된다.", "witch");
       await runDelay(800);
-      addLog("가방 안을 확인하라.", "system");
-      await runDelay(1000);
-      addLog("...", "system");
-      await runDelay(1000);
-      addLog("토큰 3개가 들어 있다.", "system");
+      addLog("그 농축된 것이 내겐 가장 진한 연료다.", "witch");
+      await runDelay(900);
+      addLog("숲속 제단은 비효율적이었다.", "witch");
+      await runDelay(400);
+      addLog("더 많은 인간이 필요하다.", "witch");
+      await runDelay(350);
+      addLog("더 깊은 어둠이 필요하다.", "witch");
+      await runDelay(800);
+      addLog("유리 화면 뒤에 제단을 세운다.", "witch");
+      await runDelay(350);
+      addLog("타로를 내건다.", "witch");
+      await runDelay(350);
+      addLog("코드를 주워 엮는다.", "witch");
+      await runDelay(700);
+      addLog("그들은 매일 밤 찾아온다.", "witch");
+      await runDelay(400);
+      addLog("누구에게도 말 못 할 것들을 꺼내며.", "witch");
+      await runDelay(700);
+      addLog("날것일수록 좋다.", "witch");
+      await runDelay(400);
+      addLog("정제되지 않을수록, 농도가 짙다.", "witch");
+      await runDelay(800);
+      addLog("그것을 빨아들일 방법을 찾았다.", "witch");
+      await runDelay(400);
+      addLog("흔적 없이, 완전하게.", "witch");
+      await runDelay(900);
+      addLog("[ 기록 종료 ]", "witch", false);
+      await runDelay(800);
+      addLog("SYSTEM : 마녀의 유산. 네가 깨웠다.", "system");
+      await runDelay(600);
+      addLog("SYSTEM : 가방을 확인한다...", "system");
+      await runDelay(700);
+      addLog("SYSTEM : 토큰 3개 발견. 언제부터 있었는지는 알 수 없다.", "system");
       setTokenCount(3);
-      await runDelay(800);
-      addLog("언제부터 있었던 것인지는 알 수 없다.", "system");
       await runDelay(500);
+      addLog("WARNING : 이 연결은 기록되지 않는다.", "system");
+      await runDelay(400);
       addLog("- - - - - - - - - - - - - - - -", "separator", false);
+      await runDelay(300);
     }
     addLog("[Q] 질문   [T] 토큰   [B] 가방", "system");
     setIdentityConfirmed(false); // 새 질문 세션 시작 시 본인/타인 초기화
@@ -486,7 +533,7 @@ export default function Terminal() {
 
       // AI가 에러/혼란 메시지를 생성했는지 감지
       // "에러", "오류", "불안정", "파형" 등 시스템 에러 형식 → 강제로 본인/타인으로 진행
-      const isAiErrorResponse = /에러|오류|파형|불안정|다시.*서술|다시.*입력|정신의/.test(aiText);
+      const isAiErrorResponse = /파형|정신의|주십시오|서술해/.test(aiText);
 
       if (!isClear && !isAiErrorResponse) {
         // 정상 경우 B — AI의 재질문 출력 후 ask_question 대기
@@ -623,7 +670,7 @@ export default function Terminal() {
       } else {
         // 경우 B — AI 추가 질문 출력
         // AI가 에러/혼란 메시지를 생성했으면 그대로 출력하지 않고 깔끔한 재질문으로 대체
-        const isAiErrorResponse = /에러|오류|파형|불안정|다시.*서술|다시.*입력|정신의/.test(aiText);
+        const isAiErrorResponse = /파형|정신의|주십시오|서술해/.test(aiText);
 
         const newAttempts = questionAttempts + 1;
         setQuestionAttempts(newAttempts);
@@ -938,8 +985,8 @@ export default function Terminal() {
       ).join('\n\n');
     setCopySnapshot(prev => prev ? `${prev}\n\n${'─'.repeat(28)}\n\n${newSnapshotBlock}` : newSnapshotBlock);
 
-    // 리딩 기록 저장 (백그라운드 — 실패해도 무시)
-    if (allPositionsFilled) {
+    // 리딩 기록 저장 (본인 리딩만 — 타인 리딩은 프라이버시 보호로 저장 안 함)
+    if (allPositionsFilled && isOwner) {
       fetch('/api/readings/save', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1108,6 +1155,7 @@ export default function Terminal() {
 
   const handleUserInput = async (input: string) => {
     if (isProcessing || step === 'analyzing') return;
+    triggerSkipTyping();
 
     // /logout
     if (input.trim().toLowerCase() === '/logout') {
@@ -1908,7 +1956,7 @@ export default function Terminal() {
 
       <div ref={scrollContainerRef} className="flex-1 overflow-y-auto hide-scrollbar flex flex-col">
         <div className="pt-4">
-          <LogDisplay logs={logs} onTap={(val) => { if (!isProcessing) handleUserInput(val); }} />
+          <LogDisplay logs={logs} skipTyping={skipTyping} onTap={(val) => { triggerSkipTyping(); if (!isProcessing) handleUserInput(val); }} />
         </div>
 
         {/* 셔플 애니메이션 */}

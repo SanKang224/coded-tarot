@@ -1,7 +1,48 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { LogType } from '@/lib/useTerminalLog';
 
 const TERMINAL_FONT = 'var(--font-roboto-mono), var(--font-noto-sans-kr), "Courier New", monospace';
+
+const GLITCH_CHARS = '▓█░▒│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌▄▀■□▪▫';
+
+// CSS 애니메이션 주입 (한 번만)
+const WITCH_STYLE = `
+@keyframes witch-flicker {
+  0%,90%,100% { opacity:1; }
+  91% { opacity:0.65; }
+  93% { opacity:1; }
+  95% { opacity:0.3; }
+  97% { opacity:1; }
+}
+@keyframes witch-shake {
+  0%,100% { transform:translate(0,0); }
+  15% { transform:translate(-0.6px, 0.4px); }
+  30% { transform:translate(0.6px,-0.4px); }
+  45% { transform:translate(-0.4px,-0.6px); }
+  60% { transform:translate(0.4px, 0.6px); }
+  75% { transform:translate(-0.3px, 0.3px); }
+}
+.witch-log {
+  color: #00FF41;
+  text-shadow:
+    0 0 4px #00FF41,
+    0 0 10px rgba(0,255,65,0.5),
+    0 0 20px rgba(0,255,65,0.2);
+  animation:
+    witch-flicker 3.5s infinite,
+    witch-shake 0.09s infinite;
+  display: block;
+}
+`;
+
+function injectWitchStyle() {
+  if (typeof document === 'undefined') return;
+  if (document.getElementById('witch-style')) return;
+  const el = document.createElement('style');
+  el.id = 'witch-style';
+  el.textContent = WITCH_STYLE;
+  document.head.appendChild(el);
+}
 
 // ─── 클릭 가능 파서 ───────────────────────────────────────────
 type Segment = { text: string; clickValue?: string };
@@ -13,7 +54,6 @@ function parseClickable(text: string): Segment[] {
   while (i < text.length) {
     const rest = text.slice(i);
 
-    // 1. [엔터]/Y 또는 [엔터]
     const enterM = rest.match(/^\[엔터\](?:\/Y)?/);
     if (enterM) {
       segments.push({ text: enterM[0], clickValue: '' });
@@ -21,17 +61,14 @@ function parseClickable(text: string): Segment[] {
       continue;
     }
 
-    // 2. [X] 한글라벨 — 브라켓 + 공백 + 한글 단어 전체를 하나의 버튼으로
-    //    ex) [Q] 질문  [T] 토큰  [B] 가방  [Y] 본인  [N] 타인
     const bracketLabelM = rest.match(/^(\[[A-Z]\])\s+([가-힣]+)/);
     if (bracketLabelM) {
-      const key = bracketLabelM[1][1]; // 브라켓 안의 알파벳
+      const key = bracketLabelM[1][1];
       segments.push({ text: bracketLabelM[0], clickValue: key });
       i += bracketLabelM[0].length;
       continue;
     }
 
-    // 3. [X] 브라켓 단독
     const bracketM = rest.match(/^\[[A-Z]\]/);
     if (bracketM) {
       const key = bracketM[0][1];
@@ -40,19 +77,14 @@ function parseClickable(text: string): Segment[] {
       continue;
     }
 
-    // 4. N. 숫자+점 (번호 선택지 — 숫자+점만 클릭, 뒤 텍스트는 plain)
-    //    "1. 질문" → [1.][질문]
-    //    줄 맨 앞(i===0 또는 직전이 공백)이고 뒤에 공백이 오는 경우만 선택지로 인식
     const numDotM = rest.match(/^([1-9]\.) /);
     const prevIsSpace = i === 0 || text[i - 1] === ' ' || text[i - 1] === '\n';
     if (numDotM && prevIsSpace) {
-      // 숫자+점만 버튼, 뒤 공백은 plain으로
       segments.push({ text: numDotM[1], clickValue: numDotM[1][0] });
       i += numDotM[1].length;
       continue;
     }
 
-    // 5. 나머지 — 이전 비클릭 세그먼트에 합치기
     const last = segments[segments.length - 1];
     if (last && !('clickValue' in last)) {
       last.text += text[i];
@@ -69,24 +101,116 @@ function parseClickable(text: string): Segment[] {
 export default function LogDisplay({
   logs,
   onTap,
+  skipTyping,
 }: {
   logs: LogType[];
   onTap?: (val: string) => void;
+  skipTyping?: boolean;
 }) {
+  useEffect(() => { injectWitchStyle(); }, []);
+
   return (
     <div
       className="flex flex-col gap-1 terminal-text"
       style={{ fontFamily: TERMINAL_FONT, fontSize: '16px', lineHeight: '1.8' }}
     >
       {logs.map((log) => (
-        <LogItem key={log.id} log={log} onTap={onTap} />
+        <LogItem key={log.id} log={log} onTap={onTap} skipTyping={skipTyping} />
       ))}
     </div>
   );
 }
 
+// ─── WitchLogItem ─────────────────────────────────────────────
+function WitchLogItem({
+  log,
+  skipTyping,
+}: {
+  log: LogType;
+  skipTyping?: boolean;
+}) {
+  const [displayedText, setDisplayedText] = useState(log.isTyping ? '' : log.text);
+  const [done, setDone] = useState(!log.isTyping);
+  const [glitched, setGlitched] = useState('');
+  const glitchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 타이핑 — 마녀 독백은 약간 더 느리게 (20ms)
+  useEffect(() => {
+    if (!log.isTyping) return;
+    let index = 0;
+    const interval = setInterval(() => {
+      // 타이핑 중 간헐적으로 글리치 문자 섞기
+      const char = log.text[index];
+      const showGlitch = char && char !== ' ' && Math.random() < 0.06;
+      setDisplayedText(
+        log.text.slice(0, index) +
+        (showGlitch ? GLITCH_CHARS[Math.floor(Math.random() * GLITCH_CHARS.length)] : char)
+      );
+      setTimeout(() => setDisplayedText(log.text.slice(0, index + 1)), 40);
+      index++;
+      if (index >= log.text.length) {
+        clearInterval(interval);
+        setDone(true);
+      }
+    }, 20);
+    return () => clearInterval(interval);
+  }, [log]);
+
+  // 스킵
+  useEffect(() => {
+    if (skipTyping && log.isTyping && !done) {
+      setDisplayedText(log.text);
+      setDone(true);
+    }
+  }, [skipTyping]);
+
+  // 완료 후 간헐적 글리치 (2~5초마다)
+  useEffect(() => {
+    if (!done) return;
+    const schedule = () => {
+      glitchTimer.current = setTimeout(() => {
+        // 1~2글자 깨뜨리기
+        const arr = log.text.split('');
+        const numGlitch = Math.floor(Math.random() * 2) + 1;
+        for (let k = 0; k < numGlitch; k++) {
+          const idx = Math.floor(Math.random() * arr.length);
+          if (arr[idx] !== ' ') {
+            arr[idx] = GLITCH_CHARS[Math.floor(Math.random() * GLITCH_CHARS.length)];
+          }
+        }
+        setGlitched(arr.join(''));
+        setTimeout(() => {
+          setGlitched('');
+          schedule();
+        }, 60 + Math.random() * 80);
+      }, 2000 + Math.random() * 3500);
+    };
+    schedule();
+    return () => { if (glitchTimer.current) clearTimeout(glitchTimer.current); };
+  }, [done, log.text]);
+
+  return (
+    <span className="witch-log" style={{ fontFamily: TERMINAL_FONT, fontSize: '16px', lineHeight: '1.8' }}>
+      {glitched || displayedText}
+    </span>
+  );
+}
+
 // ─── LogItem ─────────────────────────────────────────────────
-function LogItem({ log, onTap }: { log: LogType; onTap?: (val: string) => void }) {
+function LogItem({
+  log,
+  onTap,
+  skipTyping,
+}: {
+  log: LogType;
+  onTap?: (val: string) => void;
+  skipTyping?: boolean;
+}) {
+  // 마녀 독백 전용 렌더러
+  if (log.type === 'witch') {
+    return <WitchLogItem log={log} skipTyping={skipTyping} />;
+  }
+
   const [displayedText, setDisplayedText] = useState(log.isTyping ? '' : log.text);
   const [done, setDone] = useState(!log.isTyping);
 
@@ -104,10 +228,16 @@ function LogItem({ log, onTap }: { log: LogType; onTap?: (val: string) => void }
     return () => clearInterval(interval);
   }, [log]);
 
+  useEffect(() => {
+    if (skipTyping && log.isTyping && !done) {
+      setDisplayedText(log.text);
+      setDone(true);
+    }
+  }, [skipTyping]);
+
   const colorClass = 'text-[#00FF41]';
   const prefix = log.type === 'user' ? '> ' : '';
 
-  // 유저 입력 or 타이핑 중이면 plain 출력
   if (log.type === 'user' || !done || !onTap) {
     return (
       <div className={`${colorClass} break-words whitespace-pre-wrap`}>
