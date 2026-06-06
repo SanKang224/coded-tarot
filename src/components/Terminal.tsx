@@ -484,15 +484,19 @@ export default function Terminal() {
       const isChoice = aiText.trimStart().startsWith('CHOICE');
       const isClear = !!plan || isChoice;
 
-      if (!isClear) {
-        // 경우 B — 재질문 출력 후 ask_question 대기
+      // AI가 에러/혼란 메시지를 생성했는지 감지
+      // "에러", "오류", "불안정", "파형" 등 시스템 에러 형식 → 강제로 본인/타인으로 진행
+      const isAiErrorResponse = /에러|오류|파형|불안정|다시.*서술|다시.*입력|정신의/.test(aiText);
+
+      if (!isClear && !isAiErrorResponse) {
+        // 정상 경우 B — AI의 재질문 출력 후 ask_question 대기
         addLog(aiText, "system");
         setStep('ask_question');
         setIsProcessing(false);
         return;
       }
 
-      // 질문 명확 → 본인/타인 확인
+      // 질문 명확 또는 AI 에러 응답 → 본인/타인 확인으로 강제 진행
       addLog("■ 본인의 일인가, 타인의 일인가.", "system");
       addLog("[Y] 본인   [N] 타인", "system");
       setStep('confirm_identity');
