@@ -442,6 +442,70 @@ export default function Terminal() {
   };
 
   // ─────────────────────────────────────────────────────────
+  // Pre-Analysis — 질문 모호성 판단 (본인/타인 묻기 전)
+  // skipConfirm=true로 analyze 먼저 실행
+  // 경우 B(재질문) → 보여주고 대기
+  // 경우 A/C/TIMING/NEW_SPREAD → 본인/타인 질문
+  // ─────────────────────────────────────────────────────────
+
+  const processPreAnalysis = async (context: string[]) => {
+    setStep('analyzing');
+    setIsProcessing(true);
+    addLog("■ 질문 분석 중...", "system");
+    await runDelay(400);
+
+    try {
+      const res = await fetch('/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentInput: context[context.length - 1],
+          context: context.slice(0, -1),
+          isOwner: true,
+          skipConfirm: true,
+          prevTopicContext: (sessionCount > 0 && context.length <= 1) ? prevTopicContext : '',
+          sessionContext: readingSessionSummary,
+        }),
+      });
+      const data = await res.json();
+      const aiText: string = data.analysis || '';
+
+      // NEW_SPREAD 감지
+      if (aiText.trim() === 'NEW_SPREAD') {
+        setPendingReshuffleCtx({ context, ownerFlag: isOwner });
+        addLog("■ 지금의 이야기는 여기서 닫힌다.", "system");
+        addLog("새로운 주제를 위해 덱을 다시 섞어야 한다.", "system");
+        addLog("이대로 진행하겠는가?  Y: 계속   N: 현재 이야기 유지", "system");
+        setStep('confirm_new_topic');
+        setIsProcessing(false);
+        return;
+      }
+
+      const plan = parseReadingPlan(aiText);
+      const isChoice = aiText.trimStart().startsWith('CHOICE');
+      const isClear = !!plan || isChoice;
+
+      if (!isClear) {
+        // 경우 B — 재질문 출력 후 ask_question 대기
+        addLog(aiText, "system");
+        setStep('ask_question');
+        setIsProcessing(false);
+        return;
+      }
+
+      // 질문 명확 → 본인/타인 확인
+      addLog("■ 본인의 일인가, 타인의 일인가.", "system");
+      addLog("[Y] 본인   [N] 타인", "system");
+      setStep('confirm_identity');
+      setIsProcessing(false);
+    } catch {
+      addLog("■ 분석 회선 불안정. 다시 시도하라.", "system");
+      setStep('ask_question');
+      setIsProcessing(false);
+    }
+  };
+
+  // ─────────────────────────────────────────────────────────
   // Question → Analysis → Plan Confirm
   // ─────────────────────────────────────────────────────────
 
@@ -711,6 +775,7 @@ export default function Terminal() {
               questionContext: [readingSessionSummary, questionContext.join(' / ')].filter(Boolean).join('\n'),
               timingHint,
               readingType: readingPlan?.type,
+              isOwner,
             }),
           });
           if (res.status === 401) {
@@ -973,6 +1038,8 @@ export default function Terminal() {
     addLog("■ 결제 시스템은 현재 점검 중이다.", "system");
     addLog("곧 열린다. 조금만 기다려라.", "system");
     addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
+    addLog("[Q] 질문   [T] 토큰   [B] 가방", "system");
+    setStep('main');
   };
 
   const processTokenCharge = async (packageId: number) => {
@@ -1493,9 +1560,8 @@ export default function Terminal() {
       setIdentityConfirmed(false);
       const newContext = [input];
       setQuestionContext(newContext);
-      addLog("■ 본인의 일인가, 타인의 일인가.", "system");
-      addLog("Y: 본인   N: 타인", "system");
-      setStep('confirm_identity');
+      // 새 세션 첫 질문 — pre-analysis부터
+      await processPreAnalysis(newContext);
       return;
     }
 
@@ -1681,9 +1747,8 @@ export default function Terminal() {
         // 꼬리질문 or 이미 확인됨 → 본인/타인 재확인 없이 바로 분석
         await processAnalysis(updated, isOwner);
       } else {
-        addLog("■ 본인의 일인가, 타인의 일인가.", "system");
-        addLog("Y: 본인   N: 타인", "system");
-        setStep('confirm_identity');
+        // 첫 질문 — 모호성 먼저 판단 후 본인/타인 묻기
+        await processPreAnalysis(updated);
       }
     }
 
@@ -1760,7 +1825,7 @@ export default function Terminal() {
         await runDelay(500);
         await processAnalysis(questionContext, false);
       } else {
-        addLog("■ 본인이면 Y, 타인이면 N을 입력하라.", "system");
+        addLog("■ [Y] 본인   [N] 타인 — 다시 입력하라.", "system");
       }
     }
 

@@ -7,7 +7,7 @@
 // QUESTION / FLOW 타입 판단 + 포지션 설계
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function buildAnalysisPrompt(history: string, isOwner: boolean, prevTopicContext?: string, sessionContext?: string): string {
+export function buildAnalysisPrompt(history: string, isOwner: boolean, prevTopicContext?: string, sessionContext?: string, skipConfirm?: boolean): string {
   const newSpreadBlock = prevTopicContext ? `━━━━━━━━━━━━━━━━━━━━━━
 STEP -1 (절대 최우선): 새 덱이 필요한가?
 
@@ -33,7 +33,7 @@ STEP -1 (절대 최우선): 새 덱이 필요한가?
 
 ` : '';
 
-  const ownerBlock = isOwner ? `
+  const ownerBlock = (isOwner && !skipConfirm) ? `
 ━━━━━━━━━━━━━━━━━━━━━━
 
 경우 D — 본인 리딩이며, 필수 컨텍스트를 추론했으나 확인이 필요한 경우:
