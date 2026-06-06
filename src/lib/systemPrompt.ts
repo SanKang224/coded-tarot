@@ -33,7 +33,12 @@ STEP -1 (절대 최우선): 새 덱이 필요한가?
 
 ` : '';
 
-  const ownerBlock = (isOwner && !skipConfirm) ? `
+  const ownerBlock = skipConfirm ? `
+[PRE-ANALYSIS 모드]
+- CONFIRM 포맷 사용 금지. 경우 D 비활성.
+- 질문 텍스트만으로 리딩 타입과 포지션 설계 가능한지 판단하라.
+- 불명확하면 경우 B로 질문 1개.
+` : isOwner ? `
 ━━━━━━━━━━━━━━━━━━━━━━
 
 경우 D — 본인 리딩이며, 필수 컨텍스트를 추론했으나 확인이 필요한 경우:
