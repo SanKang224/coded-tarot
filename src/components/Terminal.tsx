@@ -621,7 +621,10 @@ export default function Terminal() {
         setChoiceTexts({ opt1: extractOpt('1.'), opt2: extractOpt('2.') });
         setStep('select_type');
       } else {
-        // 경우 B — AI 추가 질문을 그대로 출력
+        // 경우 B — AI 추가 질문 출력
+        // AI가 에러/혼란 메시지를 생성했으면 그대로 출력하지 않고 깔끔한 재질문으로 대체
+        const isAiErrorResponse = /에러|오류|파형|불안정|다시.*서술|다시.*입력|정신의/.test(aiText);
+
         const newAttempts = questionAttempts + 1;
         setQuestionAttempts(newAttempts);
 
@@ -629,9 +632,15 @@ export default function Terminal() {
           await processGlitchShutdown();
           return;
         }
-        // AI가 생성한 ■ 질문 그대로 출력
-        for (const line of aiText.split('\n')) {
-          if (line.trim()) addLog(line, "system");
+
+        if (isAiErrorResponse) {
+          // AI 에러 응답 → 사용자에게 재입력 유도 (AI 창작물 노출 안 함)
+          addLog("■ 고민을 한 문장으로 다시 던져라.", "system");
+        } else {
+          // 정상 경우 B — AI 질문 그대로 출력
+          for (const line of aiText.split('\n')) {
+            if (line.trim()) addLog(line, "system");
+          }
         }
         if (newAttempts === 2) {
           addLog("■ 오류 2회차: 연산 실패.", "system");
