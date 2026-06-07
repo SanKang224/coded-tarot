@@ -55,6 +55,13 @@ export default function TossPaymentModal({ packageId, userId, onClose }: Props) 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const TossPayments = (window as any).TossPayments as TossPaymentsFn | undefined;
 
+      // 진단: 어떤 SDK가 로드됐는지 / 키가 들어왔는지 콘솔로 확인 (실패 디버깅용)
+      console.info('[TossPaymentModal] SDK v2 init',
+        '| TossPayments:', typeof TossPayments,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        '| v1 PaymentWidget(있으면 캐시):', typeof (window as any).PaymentWidget,
+        '| CLIENT_KEY prefix:', (CLIENT_KEY || '(EMPTY)').slice(0, 17));
+
       if (!TossPayments) {
         console.error('[TossPaymentModal] window.TossPayments not found after script load');
         if (mountedRef.current) {
