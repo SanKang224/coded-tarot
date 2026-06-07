@@ -35,7 +35,7 @@ type FlowStep =
   | 'confirm_flow_config' | 'ask_flow_period' | 'confirm_new_topic'
   | 'ready_to_draw' | 'card_draw'
   | 'token_shop' | 'token_shop_confirm'
-  | 'bag' | 'confirm_end_session';
+  | 'bag' | 'bag_history' | 'confirm_end_session' | 'confirm_nav';
 
 const TOKEN_PACKAGES = [
   { id: 1, tokens: 3,  price: '990원' },
@@ -44,6 +44,9 @@ const TOKEN_PACKAGES = [
 ];
 
 const LOGIN_OPTIONS = ['google', 'kakao'];
+
+// 진행 중인 스프레드를 새로고침/결제 리다이렉트에도 복원하기 위한 sessionStorage 키
+const SPREAD_KEY = 'coded_tarot_spread';
 
 // ─────────────────────────────────────────────────────────
 // Parsers
@@ -158,6 +161,8 @@ export default function Terminal() {
   const [sessionCount, setSessionCount] = useState<number>(0);
   const [prevTopicContext, setPrevTopicContext] = useState<string>(''); // 직전 리딩 주제 (새 주제 감지용)
   const [shopReturnStep, setShopReturnStep] = useState<FlowStep>('main'); // 충전 완료 후 복귀 단계
+  const [shopFromReading, setShopFromReading] = useState<boolean>(false); // 토큰 충전을 리딩 도중 열었는지
+  const [spreadHydrated, setSpreadHydrated] = useState<boolean>(false); // 스프레드 복원 완료 여부 (저장 effect 게이트)
   const [pendingPackageId, setPendingPackageId] = useState<number | null>(null); // 선택 중인 토큰 패키지
   const [pendingEmail, setPendingEmail] = useState<string>(''); // 이메일 로그인 중 임시 저장
   const [loginMode, setLoginMode] = useState<'login' | 'signup'>('login'); // 이메일 로그인/가입 모드
@@ -168,7 +173,12 @@ export default function Terminal() {
   const [paymentPackageId, setPaymentPackageId] = useState<number | null>(null); // 열린 토스 결제 모달의 패키지 ID
   const [bagReadings, setBagReadings] = useState<Array<{ created_at: string; question_text: string; reading_type: string; count: number; reading_content: string }>>([]); // 가방 질문 내역(세션 그룹) 캐시 — 재생용
   const [bagPayments, setBagPayments] = useState<Array<{ created_at: string; amount: number; tokens_added: number; package_name: string }>>([]); // 가방 결제 내역 캐시
-  const currentOptions = step === 'login' ? LOGIN_OPTIONS : step === 'confirm_identity' ? ['Y', 'N'] : [];
+  const [pendingNav, setPendingNav] = useState<'Q' | 'B' | null>(null); // 스프레드 중 QTB 이동 확인 대기
+  const [navReturnStep, setNavReturnStep] = useState<FlowStep>('ask_question'); // 이동 취소 시 복귀 단계
+  const currentOptions = step === 'login' ? LOGIN_OPTIONS
+    : step === 'confirm_identity' ? ['Y', 'N']
+    : step === 'bag_history' ? bagReadings.map((_, i) => String(i + 1))
+    : [];
 
   // ─────────────────────────────────────────────────────────
   // Shuffle helpers
@@ -237,6 +247,52 @@ export default function Terminal() {
     };
   }, []);
 
+  // 진행 중 스프레드 복원 — navigate 복귀(결제 리다이렉트/탭 이동) 시에만. 새로고침이면 폐기.
+  const restoreSpread = (): boolean => {
+    if (typeof window === 'undefined') return false;
+    const navEntries = performance.getEntriesByType('navigation');
+    const navType = navEntries.length > 0
+      ? (navEntries[0] as PerformanceNavigationTiming).type
+      : 'navigate';
+    if (navType === 'reload') { sessionStorage.removeItem(SPREAD_KEY); return false; }
+    const saved = sessionStorage.getItem(SPREAD_KEY);
+    if (!saved) return false;
+    try {
+      const s = JSON.parse(saved);
+      if (!Array.isArray(s.currentDeck) || s.currentDeck.length === 0) return false;
+      setCurrentDeck(s.currentDeck);
+      setDrawnCards(s.drawnCards ?? []);
+      setCardReadings(s.cardReadings ?? []);
+      setReadingPlan(s.readingPlan ?? null);
+      setPendingPositionIndex(s.pendingPositionIndex ?? 0);
+      setDeckIndex(s.deckIndex ?? 0);
+      setDrawnDeckIndices(new Set(s.drawnDeckIndices ?? []));
+      setDrawnCardIds(new Set(s.drawnCardIds ?? []));
+      setSessionCount(s.sessionCount ?? 0);
+      setQuestionContext(s.questionContext ?? []);
+      setIsOwner(s.isOwner ?? true);
+      setIdentityConfirmed(s.identityConfirmed ?? false);
+      setPrevTopicContext(s.prevTopicContext ?? '');
+      setReadingSessionSummary(s.readingSessionSummary ?? '');
+      setCopySnapshot(s.copySnapshot ?? null);
+      setShuffleTopCard(s.currentDeck[0] ?? null);
+      sessionIdRef.current = s.sessionId ?? '';
+      // 전이/임시 단계는 안전한 리딩 단계로 보정
+      const transient: FlowStep[] = ['analyzing', 'token_shop', 'token_shop_confirm', 'confirm_nav', 'confirm_end_session'];
+      let restoredStep: FlowStep = s.step ?? 'ask_question';
+      if (transient.includes(restoredStep)) {
+        const plan = s.readingPlan;
+        restoredStep = (plan && (s.pendingPositionIndex ?? 0) < plan.positions.length)
+          ? 'ready_to_draw' : 'ask_question';
+      }
+      setStep(restoredStep);
+      return true;
+    } catch {
+      sessionStorage.removeItem(SPREAD_KEY);
+      return false;
+    }
+  };
+
   useEffect(() => {
     if (!isLoaded) return;
     const init = async () => {
@@ -244,7 +300,12 @@ export default function Terminal() {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         const { isNewUser } = await loadTokenBalance();
-        if (logs.length === 0) {
+        const resumed = restoreSpread();
+        if (resumed) {
+          // 결제 리다이렉트/탭 이동 후 진행 중이던 리딩 복원
+          addLog("- - - - - - - - - - - - - - - -", "separator", false);
+          addLog("■ 진행 중이던 리딩을 복원했다. 이어서 진행하라.", "system");
+        } else if (logs.length === 0) {
           // 새 탭 or 새로고침 후 세션 복귀 — 메인 메뉴만 표시
           await showMainMenu(isNewUser);
         } else {
@@ -254,12 +315,36 @@ export default function Terminal() {
         }
       } else {
         clearLogs();
+        sessionStorage.removeItem(SPREAD_KEY);
         runBootSequence();
       }
+      setSpreadHydrated(true);
     };
     init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoaded]);
+
+  // 스프레드 상태 영속화 — 복원 완료 후, 활성 리딩일 때만 저장 (새로고침/결제 복귀 대비)
+  useEffect(() => {
+    if (!spreadHydrated || typeof window === 'undefined') return;
+    const authLike = ['boot', 'login', 'login_email', 'login_email_type', 'login_email_pw'];
+    const inReading = currentDeck.length > 0 && step !== 'main' && !authLike.includes(step);
+    if (inReading) {
+      const snapshot = {
+        step, currentDeck, drawnCards, cardReadings, readingPlan,
+        pendingPositionIndex, deckIndex,
+        drawnDeckIndices: Array.from(drawnDeckIndices),
+        drawnCardIds: Array.from(drawnCardIds),
+        sessionCount, questionContext, isOwner, identityConfirmed,
+        prevTopicContext, readingSessionSummary, copySnapshot,
+        sessionId: sessionIdRef.current,
+      };
+      try { sessionStorage.setItem(SPREAD_KEY, JSON.stringify(snapshot)); } catch { /* quota */ }
+    } else {
+      sessionStorage.removeItem(SPREAD_KEY);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [spreadHydrated, step, currentDeck, drawnCards, cardReadings, readingPlan, pendingPositionIndex, deckIndex, drawnDeckIndices, drawnCardIds, sessionCount, questionContext, isOwner, identityConfirmed, prevTopicContext, readingSessionSummary, copySnapshot]);
 
   // ─────────────────────────────────────────────────────────
   // Utilities
@@ -1193,6 +1278,14 @@ export default function Terminal() {
     }
   };
 
+  // 작업 후 다음 행동 가이드 — QTB 선택 프롬프트
+  const showMenuPrompt = () => {
+    addLog("■ 무엇을 하고 싶은가?", "system");
+    addLog("[Q] 질문   [T] 토큰   [B] 가방", "system");
+    setIdentityConfirmed(false);
+    setStep('main');
+  };
+
   const openBag = async () => {
     setIsProcessing(true);
     addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
@@ -1241,34 +1334,23 @@ export default function Terminal() {
       addLog("■ 기록 회선 불안정.", "system");
     }
     addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
-    setStep('main');
+    showMenuPrompt();
     setIsProcessing(false);
   };
 
-  // 질문 내역 — 스프레드(세션) 단위. [재생]으로 최초질문+꼬리질문 전체 재생
+  // 질문 내역 — 스프레드(세션) 단위. 방향키·엔터 또는 줄 클릭으로 선택 → 재생
   const showQuestionHistory = async () => {
-    setIsProcessing(true);
     addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
     addLog("[ 질문 내역 ]", "system");
     if (bagReadings.length === 0) {
       addLog("  기록 없음.", "system");
-    } else {
-      addLog("  [재생]을 누르면 최초질문과 꼬리질문이 차례로 다시 흐른다.", "system");
-      addLog("", "system", false);
-      bagReadings.forEach((r, i) => {
-        const nn = String(i + 1).padStart(2, '0');
-        const title = r.question_text?.trim()
-          ? `${r.question_text.slice(0, 38)}${r.question_text.length > 38 ? '…' : ''}`
-          : '(제목 없음)';
-        const tail = r.count > 1 ? `  (+꼬리 ${r.count - 1})` : '';
-        addLog(`  [${nn}] ${fmtDate(r.created_at)}${tail}`, "system");
-        addLog(`       Q: ${title}   [재생 ${nn}]`, "system");
-        if (i < bagReadings.length - 1) addLog("", "system", false);
-      });
+      addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
+      showMenuPrompt();
+      return;
     }
-    addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
-    setStep('main');
-    setIsProcessing(false);
+    addLog("  방향키·엔터 또는 줄을 눌러 선택하면 그 기록이 다시 흐른다.", "system");
+    setMenuIndex(0);
+    setStep('bag_history');
   };
 
   const showPaymentHistory = async () => {
@@ -1287,7 +1369,7 @@ export default function Terminal() {
       addLog("  ※ 결제 내역은 3년간 보관 후 자동 삭제된다.", "system");
     }
     addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
-    setStep('main');
+    showMenuPrompt();
     setIsProcessing(false);
   };
 
@@ -1315,7 +1397,7 @@ export default function Terminal() {
 
     await runDelay(500);
     addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
-    addLog("재생이 끝났다.   [종료]", "system");
+    addLog("재생이 끝났다.   [질문 내역]   [메뉴]", "system");
     setStep('main');
     setIsProcessing(false);
   };
@@ -1357,6 +1439,12 @@ export default function Terminal() {
       return;
     }
 
+    // __MENU__ — QTB 선택 화면으로 ([메뉴] 버튼)
+    if (input === '__MENU__') {
+      showMenuPrompt();
+      return;
+    }
+
     // /history — 질문 내역 조회 ([질문 내역] 버튼)
     if (input.trim().toLowerCase() === '/history') {
       await showQuestionHistory();
@@ -1383,6 +1471,7 @@ export default function Terminal() {
       const supabase = createClient();
       await supabase.auth.signOut();
       clearLogs();
+      if (typeof window !== 'undefined') sessionStorage.removeItem(SPREAD_KEY);
       setStep('boot');
       setTokenCount(0);
       setIsAdmin(false);
@@ -1457,6 +1546,7 @@ export default function Terminal() {
     if (!authSteps.includes(step) && isTokenIntent(input)) {
       addLog(input.trim(), 'user');
       setShopReturnStep(step);
+      setShopFromReading(currentDeck.length > 0); // 리딩 도중 충전 여부 기록
       await showTokenShop();
       return;
     }
@@ -1478,8 +1568,48 @@ export default function Terminal() {
       setQuestionAttempts(0);
       setCardReadings([]);
       addLog("- - - - - - - - - - - - - - - -", "separator");
-      addLog("[Q] 질문   [T] 토큰   [B] 가방", "system");
-      setStep('main');
+      showMenuPrompt();
+      return;
+    }
+
+    // 전역 Q/B 내비게이션 — 단일키 또는 누적된 [Q]/[B] 버튼으로 언제든 이동.
+    // (T는 위에서 이미 전역 처리 — 스프레드를 닫지 않고 복귀)
+    // 스프레드 진행 중(currentDeck 존재)이면 닫을지 먼저 확인한다.
+    const navKey: 'Q' | 'B' | null = (() => {
+      const t = input.trim().toUpperCase();
+      if (['Q', 'ㅂ', 'ㅃ', 'ㅂㅂ', 'ㅃㅃ'].includes(t)) return 'Q';
+      if (['B', 'ㅠ', 'ㅠㅠ'].includes(t)) return 'B';
+      return null;
+    })();
+    const navExcluded: FlowStep[] = [
+      ...authSteps, 'main', 'confirm_nav', 'confirm_end_session',
+      'confirm_identity', 'confirm_plan', 'confirm_flow_config',
+      'confirm_context', 'confirm_new_topic', 'token_shop', 'token_shop_confirm',
+    ];
+    if (navKey && !navExcluded.includes(step)) {
+      addLog(input.trim(), 'user');
+      if (currentDeck.length > 0) {
+        // 스프레드 진행 중 → 이동 확인
+        setPendingNav(navKey);
+        setNavReturnStep(step);
+        addLog(navKey === 'Q'
+          ? "■ 현재 스프레드를 닫고 새 질문을 시작한다. 확실한가?"
+          : "■ 현재 스프레드를 닫고 가방을 확인한다. 확실한가?", "system");
+        addLog("[Y] 진행   [N] 취소", "system");
+        setStep('confirm_nav');
+        return;
+      }
+      // 진행 중 스프레드 없음 → 즉시 이동
+      if (navKey === 'Q') {
+        setQuestionContext([]);
+        setReadingPlan(null);
+        setQuestionAttempts(0);
+        setIdentityConfirmed(false);
+        addLog("무엇을 알고 싶은가.", "system");
+        setStep('ask_question');
+      } else {
+        await openBag();
+      }
       return;
     }
 
@@ -1514,6 +1644,22 @@ export default function Terminal() {
         else { addLog("■ 알 수 없는 입력.", "system"); return; }
       }
       processLoginFlow(selectedOption);
+      return;
+    }
+
+    // bag_history — 질문 내역 선택 (엔터=현재 선택 재생 / 번호 입력=해당 재생)
+    if (step === 'bag_history') {
+      if (input === '') {
+        if (bagReadings.length > 0) await replayReading(menuIndex + 1);
+        return;
+      }
+      const n = parseInt(input.trim(), 10);
+      if (!Number.isNaN(n) && n >= 1 && n <= bagReadings.length) {
+        addLog(input.trim(), 'user');
+        await replayReading(n);
+        return;
+      }
+      // 그 외 입력 무시 (Q/T/B는 전역 처리에서 이미 잡힘)
       return;
     }
 
@@ -1752,8 +1898,13 @@ export default function Terminal() {
       addLog(input, 'user');
       const trimmed = input.trim();
       if (isNo(trimmed)) {
-        addLog("■ 취소. 이전 상태로 돌아간다.", "system");
-        setStep(shopReturnStep);
+        if (shopFromReading) {
+          addLog("■ 취소. 리딩을 계속한다.", "system");
+          setStep(shopReturnStep);
+        } else {
+          addLog("■ 충전을 취소했다.", "system");
+          showMenuPrompt();
+        }
         return;
       }
       const num = parseInt(trimmed);
@@ -1898,17 +2049,47 @@ export default function Terminal() {
 
     // confirm_end_session — 세션 종료 확인
     if (step === 'confirm_end_session') {
-      addLog(input, 'user');
       if (isYes(input)) {
         addLog("세션을 종료한다.", "system");
         await runDelay(300);
         addLog("- - - - - - - - - - - - - - - -", "separator");
-        addLog("[Q] 질문   [T] 토큰   [B] 가방", "system");
-        setStep('main');
+        showMenuPrompt();
       } else {
         addLog("꼬리질문을 입력하라.", "system");
         setStep('ask_question');
       }
+      return;
+    }
+
+    // confirm_nav — 스프레드 진행 중 QTB 이동 확인
+    if (step === 'confirm_nav') {
+      if (isYes(input)) {
+        // 스프레드 닫기 (전체 리셋)
+        setQuestionContext([]);
+        setReadingPlan(null);
+        setQuestionAttempts(0);
+        setCurrentDeck([]);
+        setDrawnCards([]);
+        setCardReadings([]);
+        setDeckIndex(0);
+        setSessionCount(0);
+        setDrawnDeckIndices(new Set());
+        setDrawnCardIds(new Set());
+        setReadingSessionSummary('');
+        setPrevTopicContext('');
+        setIdentityConfirmed(false);
+        if (pendingNav === 'B') {
+          await openBag();
+        } else {
+          addLog("- - - - - - - - - - - - - - - -", "separator");
+          addLog("무엇을 알고 싶은가.", "system");
+          setStep('ask_question');
+        }
+      } else {
+        addLog("■ 취소. 리딩을 계속한다.", "system");
+        setStep(navReturnStep);
+      }
+      setPendingNav(null);
       return;
     }
 
@@ -2187,6 +2368,27 @@ export default function Terminal() {
   />
 )}
 
+        {/* 질문 내역 — 한 줄, 방향키/엔터·클릭 선택 */}
+        {step === 'bag_history' && !isProcessing && (
+          <div className="flex flex-col gap-1 my-2 font-mono text-[16px]">
+            {bagReadings.map((r, idx) => {
+              const isSel = idx === menuIndex;
+              const nn = String(idx + 1).padStart(2, '0');
+              const q = r.question_text?.trim() || '(제목 없음)';
+              const tail = r.count > 1 ? ` (+꼬리 ${r.count - 1})` : '';
+              return (
+                <div
+                  key={idx}
+                  onClick={() => { triggerSkipTyping(); if (!isProcessing) replayReading(idx + 1); }}
+                  title={q}
+                  className={`cursor-pointer whitespace-nowrap overflow-hidden text-ellipsis ${isSel ? 'text-white' : 'text-[#00FF41]'}`}
+                >
+                  {isSel ? '▶ ' : '  '}[{nn}] {fmtDate(r.created_at)}{tail}  Q: {q}
+                </div>
+              );
+            })}
+          </div>
+        )}
 
         <div ref={bottomRef} className="h-4 shrink-0" />
         </div>
@@ -2198,7 +2400,7 @@ export default function Terminal() {
             onSubmit={handleUserInput}
             onArrowKey={handleArrowKey}
             disabled={isProcessing}
-            allowEmpty={(['confirm_plan', 'confirm_flow_config', 'confirm_context', 'confirm_identity', 'ask_flow_period', 'confirm_new_topic', 'token_shop_confirm', 'login', 'confirm_end_session'] as FlowStep[]).includes(step)}
+            allowEmpty={(['confirm_plan', 'confirm_flow_config', 'confirm_context', 'confirm_identity', 'ask_flow_period', 'confirm_new_topic', 'token_shop_confirm', 'login', 'confirm_end_session', 'bag_history'] as FlowStep[]).includes(step)}
           />
         </div>
       )}
@@ -2208,7 +2410,14 @@ export default function Terminal() {
         <TossPaymentModal
           packageId={paymentPackageId}
           userId={userId}
-          onClose={() => setPaymentPackageId(null)}
+          onClose={() => {
+            setPaymentPackageId(null);
+            if (shopFromReading) {
+              addLog("■ 결제를 닫았다. 리딩을 계속한다.", "system");
+            } else {
+              showMenuPrompt();
+            }
+          }}
         />
       )}
     </div>

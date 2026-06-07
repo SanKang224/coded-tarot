@@ -99,6 +99,12 @@ function parseClickable(text: string): Segment[] {
       i += payHistM[0].length;
       continue;
     }
+    const menuM = rest.match(/^\[메뉴\]/);
+    if (menuM) {
+      segments.push({ text: menuM[0], clickValue: '__MENU__' });
+      i += menuM[0].length;
+      continue;
+    }
 
     const enterM = rest.match(/^\[엔터\](?:\/Y)?/);
     if (enterM) {
