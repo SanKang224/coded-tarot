@@ -163,6 +163,7 @@ export default function Terminal() {
   const [shopReturnStep, setShopReturnStep] = useState<FlowStep>('main'); // 충전 완료 후 복귀 단계
   const [shopFromReading, setShopFromReading] = useState<boolean>(false); // 토큰 충전을 리딩 도중 열었는지
   const [spreadHydrated, setSpreadHydrated] = useState<boolean>(false); // 스프레드 복원 완료 여부 (저장 effect 게이트)
+  const [showScrollHint, setShowScrollHint] = useState<boolean>(false); // 아래에 안 보인 내용이 있을 때 '▼ 더 있음' 표시
   const [pendingPackageId, setPendingPackageId] = useState<number | null>(null); // 선택 중인 토큰 패키지
   const [pendingEmail, setPendingEmail] = useState<string>(''); // 이메일 로그인 중 임시 저장
   const [loginMode, setLoginMode] = useState<'login' | 'signup'>('login'); // 이메일 로그인/가입 모드
@@ -222,39 +223,61 @@ export default function Terminal() {
     return () => window.removeEventListener('beforeunload', handleBeforeUnload);
   }, [logs.length]);
 
-  // 자동 스크롤 — 근본 원인: 타이핑 애니메이션으로 콘텐츠 높이가 자라도 logs 배열은
-  // 안 바뀌어 effect가 재실행되지 않아 바닥을 못 따라갔다. ResizeObserver로 높이 변화를
-  // 직접 감지해 추적한다. 사용자가 위로 스크롤하면(stickToBottom=false) 방해하지 않는다.
+  // 자동 스크롤 — 타이핑/글리치로 텍스트가 자라도 항상 맨 아래를 따라간다.
+  // 핵심: MutationObserver(텍스트 변화) + ResizeObserver(높이 변화) → requestAnimationFrame으로
+  // "레이아웃 반영 후" 스크롤(동기 시점엔 scrollHeight가 갱신 전이라 한 박자 늦던 문제 해결).
+  // 사용자가 위로 스크롤하면 추적을 멈추고, 가려진 내용이 있으면 '▼ 더 있음' 표시.
   useEffect(() => {
     const container = scrollContainerRef.current;
     const content = contentRef.current;
     if (!container || !content) return;
 
-    const scrollToBottomIfStuck = () => {
-      if (stickToBottomRef.current) container.scrollTop = container.scrollHeight;
+    const NEAR = 24; // 바닥 인접 판정 여유(px)
+
+    const updateHint = () => {
+      const hidden = container.scrollHeight - container.scrollTop - container.clientHeight;
+      setShowScrollHint(hidden > 40);
     };
 
-    // 사용자가 위로 스크롤하면 추적 중단(바닥 근처면 재개)
+    let rafId = 0;
+    const follow = () => {
+      if (!stickToBottomRef.current) { updateHint(); return; }
+      cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(() => {
+        container.scrollTop = container.scrollHeight;
+        updateHint();
+      });
+    };
+
     const onScroll = () => {
       stickToBottomRef.current =
         container.scrollHeight - container.scrollTop - container.clientHeight < 120;
+      updateHint();
     };
     container.addEventListener('scroll', onScroll, { passive: true });
 
-    // 타이핑/글리치로 인한 텍스트 변화(노드·문자 변경)까지 확실히 추적 — RO만으론 놓치는 경우 대비
-    const mo = new MutationObserver(scrollToBottomIfStuck);
+    const mo = new MutationObserver(follow);
     mo.observe(content, { childList: true, subtree: true, characterData: true });
 
-    // 래핑·이미지 등 레이아웃 크기 변화 대비
-    const ro = new ResizeObserver(scrollToBottomIfStuck);
+    const ro = new ResizeObserver(follow);
     ro.observe(content);
 
     return () => {
+      cancelAnimationFrame(rafId);
       container.removeEventListener('scroll', onScroll);
       mo.disconnect();
       ro.disconnect();
     };
   }, []);
+
+  // 맨 아래로 강제 스크롤 (▼ 표시 클릭 시)
+  const scrollToBottom = () => {
+    const c = scrollContainerRef.current;
+    if (!c) return;
+    stickToBottomRef.current = true;
+    c.scrollTop = c.scrollHeight;
+    setShowScrollHint(false);
+  };
 
   // 진행 중 스프레드 복원 — navigate 복귀(결제 리다이렉트/탭 이동) 시에만. 새로고침이면 폐기.
   const restoreSpread = (): boolean => {
@@ -2305,7 +2328,7 @@ export default function Terminal() {
   if (!isLoaded) return null;
 
   return (
-    <div className="w-full max-w-[468.5px] my-4 h-[92dvh] max-h-[1002px] sm:aspect-[9/20] border border-[#00FF41] rounded-[20px] sm:rounded-[45px] p-[20px] bg-black flex flex-col relative mx-auto shadow-[0_0_20px_rgba(0,255,65,0.2)] overflow-hidden">
+    <div className="w-full max-w-[468.5px] h-full max-h-[1002px] sm:aspect-[9/20] border border-[#00FF41] rounded-[20px] sm:rounded-[45px] p-[20px] bg-black flex flex-col relative mx-auto shadow-[0_0_20px_rgba(0,255,65,0.2)] overflow-hidden">
 
       {/* 상단 배너 */}
       <div
@@ -2332,7 +2355,7 @@ export default function Terminal() {
         </span>
       </div>
 
-      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto hide-scrollbar flex flex-col">
+      <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-y-auto hide-scrollbar relative">
         <div ref={contentRef}>
         <div className="pt-4">
           <LogDisplay logs={logs} skipTyping={skipTyping} onTap={(val) => { triggerSkipTyping(); if (!isProcessing) handleUserInput(val); }} />
@@ -2405,6 +2428,29 @@ export default function Terminal() {
         <div ref={bottomRef} className="h-4 shrink-0" />
         </div>
       </div>
+
+      {/* 아래에 가려진 내용이 있을 때 — 클릭하면 맨 아래로 */}
+      {showScrollHint && (
+        <button
+          onClick={scrollToBottom}
+          aria-label="맨 아래로"
+          className="absolute left-1/2 -translate-x-1/2 z-20 cursor-pointer animate-pulse"
+          style={{
+            bottom: '64px',
+            fontFamily: 'var(--font-roboto-mono), var(--font-noto-sans-kr), "Courier New", monospace',
+            fontSize: '12px',
+            color: '#000',
+            background: '#00FF41',
+            border: 'none',
+            borderRadius: '14px',
+            padding: '5px 14px',
+            fontWeight: 'bold',
+            boxShadow: '0 0 12px rgba(0,255,65,0.6)',
+          }}
+        >
+          ▼ 더 있음
+        </button>
+      )}
 
       {(step !== 'card_draw' || sessionCount >= 15) && (
         <div className="shrink-0 pt-2 pb-2 bg-black">

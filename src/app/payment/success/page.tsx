@@ -49,7 +49,7 @@ function SuccessContent() {
 
   return (
     <div style={{
-      minHeight: '100dvh', background: '#000',
+      minHeight: '100%', width: '100%', background: '#000',
       display: 'flex', alignItems: 'center', justifyContent: 'center',
       fontFamily: FONT, padding: '24px',
     }}>

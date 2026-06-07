@@ -27,10 +27,11 @@ export default function RootLayout({
   return (
     <html lang="ko">
       {/* 바깥 스크롤이 발생하지 않도록 overflow-hidden 추가 */}
-      <body className={`${robotoMono.variable} ${notoSansKr.variable} font-kr bg-black min-h-[100dvh] w-full flex flex-col items-center overflow-y-auto`}>
-        <div className="flex-1 w-full flex items-start justify-center">
+      {/* 바깥(페이지)은 스크롤 금지 — 스크롤은 터미널 내부에서만. 사업자정보 푸터는 하단 고정 */}
+      <body className={`${robotoMono.variable} ${notoSansKr.variable} font-kr bg-black h-[100dvh] w-full flex flex-col items-center overflow-hidden`}>
+        <main className="flex-1 min-h-0 w-full flex items-center justify-center overflow-hidden py-2">
           {children}
-        </div>
+        </main>
         <Footer />
       </body>
     </html>

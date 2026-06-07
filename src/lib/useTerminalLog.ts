@@ -24,12 +24,16 @@ export function useTerminalLog() {
       ? (navEntries[0] as PerformanceNavigationTiming).type
       : 'navigate';
 
-    if (navType === 'reload') {
-      // 새로고침: 로그 초기화
+    // OAuth/결제로 의도적으로 떠났다 돌아온 경우(safe_leave)는 navType이 reload로 잡혀도 로그 보존.
+    // (이 effect는 Terminal의 safe_leave 제거 effect보다 먼저 실행되어 플래그를 읽을 수 있다)
+    const intentionalReturn = sessionStorage.getItem('safe_leave') === 'true';
+
+    if (navType === 'reload' && !intentionalReturn) {
+      // 진짜 수동 새로고침: 로그 초기화
       sessionStorage.removeItem(STORAGE_KEY);
       setLogs([]);
     } else {
-      // OAuth 복귀(navigate): sessionStorage에 있으면 복원
+      // 일반 진입 / OAuth·결제 복귀: sessionStorage에 있으면 복원
       const saved = sessionStorage.getItem(STORAGE_KEY);
       if (saved) {
         try {
