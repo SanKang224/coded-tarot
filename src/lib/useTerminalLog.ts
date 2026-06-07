@@ -72,4 +72,3 @@ export function useTerminalLog() {
 
   return { logs, addLog, setLogs, clearLogs, extinguishWitchLogs, isLoaded };
 }
-ㄹ
