@@ -129,7 +129,6 @@ ${questionContext || '없음'}${timingHint ? `\n\n[타이밍 힌트]\n${timingHi
           contents: [{ parts: [{ text: fullPrompt }] }],
           generationConfig: {
             temperature: 0.9,
-            maxOutputTokens: 2048,
           },
         }),
       }

@@ -10,6 +10,7 @@ import { createClient } from '@/lib/supabase';
 import ShuffleOverlay from './ShuffleOverlay';
 import { getCardById } from '@/lib/tarotData';
 import CardGrid from './CardGrid';
+import TossPaymentModal, { TOSS_PACKAGES } from './TossPaymentModal';
 
 // ─────────────────────────────────────────────────────────
 // Types
@@ -160,6 +161,8 @@ export default function Terminal() {
   const [pendingReshuffleCtx, setPendingReshuffleCtx] = useState<{ context: string[]; ownerFlag: boolean } | null>(null);
   const [readingSessionSummary, setReadingSessionSummary] = useState<string>(''); // 이번 세션 리딩 누적 요약 (덱 리셋에도 유지)
   const [choiceTexts, setChoiceTexts] = useState<{ opt1: string; opt2: string } | null>(null); // CHOICE 예시 텍스트 저장
+  const [userId, setUserId] = useState<string>(''); // Supabase user.id (TossPaymentModal customerKey용)
+  const [paymentPackageId, setPaymentPackageId] = useState<number | null>(null); // 열린 토스 결제 모달의 패키지 ID
   const currentOptions = step === 'login' ? LOGIN_OPTIONS : step === 'confirm_identity' ? ['Y', 'N'] : [];
 
   // ─────────────────────────────────────────────────────────
@@ -331,6 +334,7 @@ export default function Terminal() {
         setTokenCount(data.balance ?? 0);
         setIsAdmin(data.isAdmin ?? false);
         setIsLoggedIn(true);
+        if (user) setUserId(user.id);
         const key = `onboarding_done_${user?.id}`;
         const alreadySeen = localStorage.getItem(key) === 'true';
         if (!alreadySeen && user) {
@@ -1100,11 +1104,15 @@ export default function Terminal() {
 
   const showTokenShop = async () => {
     addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
-    addLog("■ 결제 시스템은 현재 점검 중이다.", "system");
-    addLog("곧 열린다. 조금만 기다려라.", "system");
+    addLog("▶ 토큰 충전소", "system");
+    addLog("", "system", false);
+    TOSS_PACKAGES.forEach(pkg => {
+      addLog(`  [${pkg.id}] ${pkg.label}`, "system");
+    });
+    addLog("", "system", false);
+    addLog("번호를 입력하라.  N: 취소", "system");
     addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
-    addLog("[Q] 질문   [T] 토큰   [B] 가방", "system");
-    setStep('main');
+    setStep('token_shop');
   };
 
   const processTokenCharge = async (packageId: number) => {
@@ -1152,6 +1160,15 @@ export default function Terminal() {
   const handleUserInput = async (input: string) => {
     if (isProcessing || step === 'analyzing') return;
     triggerSkipTyping();
+
+    // /onboarding — 온보딩 재생 (개발/테스트용)
+    if (input.trim().toLowerCase() === '/onboarding') {
+      addLog('/onboarding', 'user');
+      setIsProcessing(true);
+      await showMainMenu(true);
+      setIsProcessing(false);
+      return;
+    }
 
     // /logout
     if (input.trim().toLowerCase() === '/logout') {
@@ -1523,7 +1540,7 @@ export default function Terminal() {
       return;
     }
 
-    // token_shop — 패키지 선택
+    // token_shop — 패키지 선택 → Toss 결제 모달 오픈
     if (step === 'token_shop') {
       addLog(input, 'user');
       const trimmed = input.trim();
@@ -1533,13 +1550,11 @@ export default function Terminal() {
         return;
       }
       const num = parseInt(trimmed);
-      const pkg = TOKEN_PACKAGES.find(p => p.id === num);
+      const pkg = TOSS_PACKAGES.find(p => p.id === num);
       if (pkg) {
-        setPendingPackageId(pkg.id);
-        addLog("", "system", false);
-        addLog(`${pkg.tokens}토큰  —  ${pkg.price}`, "system");
-        addLog("진행하겠는가?  [엔터]/Y: 확정   N: 취소", "system");
-        setStep('token_shop_confirm');
+        // 모달 오픈 — step은 shopReturnStep으로 복귀 (모달이 오버레이)
+        setStep(shopReturnStep);
+        setPaymentPackageId(pkg.id);
         return;
       }
       addLog("■ 1, 2, 3 중 하나를 입력하라.", "system");
@@ -1809,6 +1824,21 @@ export default function Terminal() {
         return;
       }
 
+      // 조언 버튼 — analyze 없이 1장 플랜 직행
+      const isAdviceTrigger = input === '이 상황에서 나에게 조언을 해줘';
+      if (isAdviceTrigger) {
+        const advicePlan: ReadingPlan = {
+          type: 'QUESTION',
+          cardCount: 1,
+          positions: [{ name: '조언', question: '지금 이 상황에서 내가 취해야 할 가장 중요한 것은 무엇인가' }],
+        };
+        setReadingPlan(advicePlan);
+        setQuestionAttempts(0);
+        setQuestionContext(prev => [...prev, input]);
+        await processPlanConfirmation(advicePlan);
+        return;
+      }
+
       // 주제 일관성 감지: 이전 리딩이 있고(sessionCount > 0), 새 질문이 시작되는 시점(questionContext 비어있음)에만 체크
       // 명시적 새 주제 의도 OR 카테고리가 다른 주제로 판단될 때 확인 요청
       const updated = [...questionContext, input];
@@ -2010,6 +2040,15 @@ export default function Terminal() {
             allowEmpty={(['confirm_plan', 'confirm_flow_config', 'confirm_context', 'confirm_identity', 'ask_flow_period', 'confirm_new_topic', 'token_shop_confirm', 'login', 'confirm_end_session'] as FlowStep[]).includes(step)}
           />
         </div>
+      )}
+
+      {/* Toss 결제 모달 — position:fixed 오버레이 */}
+      {paymentPackageId !== null && userId && (
+        <TossPaymentModal
+          packageId={paymentPackageId}
+          userId={userId}
+          onClose={() => setPaymentPackageId(null)}
+        />
       )}
     </div>
   );
