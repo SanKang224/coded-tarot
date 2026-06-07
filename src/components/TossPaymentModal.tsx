@@ -25,9 +25,9 @@ type TossPaymentsInstance = {
 type TossPaymentsFn = ((clientKey: string) => TossPaymentsInstance) & { ANONYMOUS: string };
 
 export const TOSS_PACKAGES = [
-  { id: 1, tokens: 3,  amount: 990,  label: '3토큰   —   990원',  name: 'CODED TAROT 3토큰' },
-  { id: 2, tokens: 15, amount: 4450, label: '15토큰  —  4,450원', name: 'CODED TAROT 15토큰' },
-  { id: 3, tokens: 30, amount: 8910, label: '30토큰  —  8,910원', name: 'CODED TAROT 30토큰' },
+  { id: 1, tokens: 3,  amount: 990,  label: '3토큰   —   990원',  name: "WITCH'S TERMINAL 3토큰" },
+  { id: 2, tokens: 15, amount: 4450, label: '15토큰  —  4,450원', name: "WITCH'S TERMINAL 15토큰" },
+  { id: 3, tokens: 30, amount: 8910, label: '30토큰  —  8,910원', name: "WITCH'S TERMINAL 30토큰" },
 ] as const;
 
 type Props = {

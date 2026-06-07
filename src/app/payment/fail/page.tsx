@@ -25,7 +25,7 @@ function FailContent() {
         color: '#00FF41',
       }}>
         <div style={{ marginBottom: '16px', fontSize: '11px', opacity: 0.4 }}>
-          [CODED-TAROT_OS v0.78] — PAYMENT FAILED
+          [WITCH&apos;S TERMINAL v0.0] — PAYMENT FAILED
         </div>
 
         <div style={{ color: '#FF3300', marginBottom: '12px', fontSize: '15px' }}>

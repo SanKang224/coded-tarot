@@ -61,7 +61,7 @@ function SuccessContent() {
         color: '#00FF41',
       }}>
         <div style={{ marginBottom: '16px', fontSize: '11px', opacity: 0.4 }}>
-          [CODED-TAROT_OS v0.78] — PAYMENT
+          [WITCH&apos;S TERMINAL v0.0] — PAYMENT
         </div>
 
         {status === 'loading' && (

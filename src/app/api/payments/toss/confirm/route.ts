@@ -5,9 +5,9 @@ const TOSS_CONFIRM_URL = 'https://api.tosspayments.com/v1/payments/confirm';
 
 // packageId → 토큰 수 / 상품명
 const PACKAGES: Record<number, { tokens: number; name: string }> = {
-  1: { tokens: 3,  name: 'CODED TAROT 3토큰'  },
-  2: { tokens: 15, name: 'CODED TAROT 15토큰' },
-  3: { tokens: 30, name: 'CODED TAROT 30토큰' },
+  1: { tokens: 3,  name: "WITCH'S TERMINAL 3토큰"  },
+  2: { tokens: 15, name: "WITCH'S TERMINAL 15토큰" },
+  3: { tokens: 30, name: "WITCH'S TERMINAL 30토큰" },
 };
 
 // orderId 형식: ct-{packageId}-{timestamp}

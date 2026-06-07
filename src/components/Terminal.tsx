@@ -2323,7 +2323,7 @@ export default function Terminal() {
           gap: '6px',
         }}
       >
-        <span style={{ whiteSpace: 'nowrap' }}>[CODED-TAROT_OS v0.78]</span>
+        <span style={{ whiteSpace: 'nowrap' }}>[WITCH&apos;S TERMINAL v0.0]</span>
         <span style={{ flex: 1, overflow: 'hidden', color: 'rgba(0,255,65,0.3)', letterSpacing: '0.08em', textAlign: 'center', userSelect: 'none' }}>
           {'─'.repeat(20)}
         </span>
