@@ -230,19 +230,28 @@ export default function Terminal() {
     const content = contentRef.current;
     if (!container || !content) return;
 
+    const scrollToBottomIfStuck = () => {
+      if (stickToBottomRef.current) container.scrollTop = container.scrollHeight;
+    };
+
+    // 사용자가 위로 스크롤하면 추적 중단(바닥 근처면 재개)
     const onScroll = () => {
       stickToBottomRef.current =
-        container.scrollHeight - container.scrollTop - container.clientHeight < 80;
+        container.scrollHeight - container.scrollTop - container.clientHeight < 120;
     };
     container.addEventListener('scroll', onScroll, { passive: true });
 
-    const ro = new ResizeObserver(() => {
-      if (stickToBottomRef.current) container.scrollTop = container.scrollHeight;
-    });
+    // 타이핑/글리치로 인한 텍스트 변화(노드·문자 변경)까지 확실히 추적 — RO만으론 놓치는 경우 대비
+    const mo = new MutationObserver(scrollToBottomIfStuck);
+    mo.observe(content, { childList: true, subtree: true, characterData: true });
+
+    // 래핑·이미지 등 레이아웃 크기 변화 대비
+    const ro = new ResizeObserver(scrollToBottomIfStuck);
     ro.observe(content);
 
     return () => {
       container.removeEventListener('scroll', onScroll);
+      mo.disconnect();
       ro.disconnect();
     };
   }, []);
