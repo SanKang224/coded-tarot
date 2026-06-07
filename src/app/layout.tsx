@@ -44,14 +44,15 @@ export default function RootLayout({
         className={`${robotoMono.variable} ${notoSansKr.variable} font-kr bg-black w-full flex flex-col items-center overflow-hidden`}
         style={{
           height: 'var(--app-h, 100svh)',
-          paddingTop: 'env(safe-area-inset-top)',
-          paddingBottom: 'env(safe-area-inset-bottom)',
+          // 상태바/노치 높이는 폰마다 달라 safe-area로 맞추되, 0으로 오는 환경 대비 최소 여백 확보
+          paddingTop: 'max(env(safe-area-inset-top), 8px)',
+          paddingBottom: 'max(env(safe-area-inset-bottom), 8px)',
           paddingLeft: 'env(safe-area-inset-left)',
           paddingRight: 'env(safe-area-inset-right)',
         }}
       >
         <ViewportHeight />
-        <main className="flex-1 min-h-0 w-full flex items-center justify-center overflow-hidden px-3 py-2">
+        <main className="flex-1 min-h-0 w-full flex flex-col items-center justify-center overflow-hidden px-3 py-2">
           {children}
         </main>
         <Footer />

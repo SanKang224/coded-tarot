@@ -2,6 +2,15 @@
 @tailwind components;
 @tailwind utilities;
 
+html {
+  height: 100%;
+  overflow: hidden; /* 바깥(문서) 스크롤 금지 — 스크롤은 터미널 내부에서만 */
+}
+
+html, body {
+  overscroll-behavior: none; /* iOS 고무줄(바운스) 스크롤 방지 */
+}
+
 body {
   background-color: #000000;
   color: #00FF41;
