@@ -74,41 +74,39 @@ LLM 코딩에서 자주 발생하는 실수를 줄이기 위한 행동 가이드
 
 ---
 
-## Plan Contract (Phase 1 — v1.0)
+## Current State (2026-06-07)
 
-### Scope
-CODED TAROT — 레트로 MUD 감성 텍스트 타로 웹앱.
-AI 질문 고도화 → 물리 셔플 → 카드 드로우 → 마녀 문체 AI 해석 (전체 루프 완성).
+### 완료된 작업
 
-### Change Map
-| 파일 | 상태 | 변경 내용 |
-|------|------|-----------|
-| `src/lib/systemPrompt.ts` | 존재 | `buildReadingPrompt()` 추가 |
-| `src/app/api/read/route.ts` | 신규 | 마녀 해석 API 라우트 |
-| `src/components/CardReading.tsx` | 신규 | 카드 해석 결과 표시 컴포넌트 |
-| `src/components/Terminal.tsx` | 존재 | `[카드 드로우 배치 컴포넌트 연동 예정]` 구역 완성 |
+**Phase 1 — 타로 리딩 루프 (완료)**
+- `src/lib/systemPrompt.ts` — `buildReadingPrompt()` 구현
+- `src/app/api/read/route.ts` — POST {cards, tags} → {reading} 반환. 이진 질문(예/아니오)과 일반 질문 결론 구분 처리
+- `src/components/CardReading.tsx` — 카드 해석 결과 표시 (✦ 기호, TAG별 구분)
+- `src/components/Terminal.tsx` — 카드 드로우 → 리딩 API 자동 호출 → 타이핑 애니메이션 출력 연동 완료
+- `src/app/api/synthesis/route.ts` — `maxOutputTokens` 제거 (thinking 토큰 초과 방지)
 
-### Phases
-1. `buildReadingPrompt()` 시스템 프롬프트 작성 → verify: 78장 카드 ID + 정/역방향 + TAG 3개를 받아 마녀 문체로 해석
-2. `/api/read` 라우트 구현 → verify: POST {cards, tags} → {reading} JSON 반환
-3. `<CardReading />` 컴포넌트 구현 → verify: glassmorphism 박스, ✦ 기호, TAG별 구분
-4. `Terminal.tsx` 연동 → verify: 카드 드로우 후 자동으로 리딩 API 호출 → 출력
+**결제 연동 (완료)**
+- `src/components/TossPaymentModal.tsx` — 전체 재작성. `next/script` + `window.PaymentWidget` 직접 호출로 "결제 모듈 로드 실패" 버그 수정. `safe_leave` sessionStorage 플래그로 beforeunload 경고 억제
+- `next.config.ts` — `transpilePackages: ['@tosspayments/payment-widget-sdk']` 추가
+- `src/app/api/payments/toss/confirm/route.ts` — idempotency 처리, Toss 금액 검증, 토큰 지급
 
-### Acceptance Criteria
-- 3장의 카드(ID + isReversed) + TAG 3개 → AI 마녀 해석 → 터미널 출력
-- 각 카드에 대해 TAG에 연결된 해석 (TAG 01/02/03 각각)
-- 마녀 문체: ~다. / ~인가. — ~해요 금지
-- 해석 앞: ✦ 기호
-- 역방향 카드는 "역방향 에너지" 관점으로 해석
-- 타이핑 애니메이션으로 출력
+**터미널 로그 (완료)**
+- `src/lib/useTerminalLog.ts` — 자동 트림(200개 초과 시 오래된 항목 제거), `clearLogs()` 추가
+- `src/components/Terminal.tsx` — `/clear` 커맨드 추가
 
-### Risks
-- Gemini API 응답 형식 불안정 → 파싱 방어 코드 필수
-- 토큰 길이 초과 → 해석을 카드당 3~5문장으로 제한
+### 미완료 / Pending
 
-### Rollback
-기존 Terminal.tsx의 [카드 드로우 배치 컴포넌트 연동 예정 구역] 코드 외에만 변경.
-실패 시 해당 구역만 원복.
+- **[중요] Supabase 마이그레이션 수동 실행 필요**
+  - 파일: `supabase/migrations/20260607_add_toss_columns.sql`
+  - 내용: `payments` 테이블에 `toss_order_id TEXT UNIQUE`, `toss_payment_key TEXT` 컬럼 추가
+  - 방법: Supabase Dashboard → SQL Editor에서 해당 파일 내용 실행
+
+### 기술 스택 메모
+- Next.js 16 App Router, TypeScript, React 19
+- Supabase Auth (cookie-based, RLS) — `profiles` 테이블: `token_balance`, `is_admin`
+- Gemini 2.5 Flash API (thinking mode) — `@google/generative-ai`
+- `@tosspayments/payment-widget-sdk` v0.12.1 (CJS, CDN 직접 로드로 우회)
+- `useTerminalLog` — sessionStorage 기반 로그 유지 (`navType === 'navigate'` 복원, `'reload'` 초기화)
 
 ---
 

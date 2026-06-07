@@ -115,7 +115,7 @@ function parseConfirmLines(text: string): string[] {
 // ─────────────────────────────────────────────────────────
 
 export default function Terminal() {
-  const { logs, addLog, clearLogs, isLoaded } = useTerminalLog();
+  const { logs, addLog, clearLogs, extinguishWitchLogs, isLoaded } = useTerminalLog();
   const [step, setStep] = useState<FlowStep>('boot');
   const [isProcessing, setIsProcessing] = useState(false);
   const [skipTyping, setSkipTyping] = useState(false);
@@ -395,6 +395,7 @@ export default function Terminal() {
       addLog("SYSTEM : 가방을 확인한다...", "system");
       await runDelay(700);
       addLog("SYSTEM : 토큰 3개 발견. 언제부터 있었는지는 알 수 없다.", "system");
+      extinguishWitchLogs(); // 토큰 발견 → 마녀 독백의 빛이 꺼지고 회색 죽은 글자로 전환
       setTokenCount(3);
       await runDelay(500);
       addLog("WARNING : 이 연결은 기록되지 않는다.", "system");
@@ -855,7 +856,7 @@ export default function Terminal() {
             readingSucceeded = true;
             addLog(`✦ 타이밍`, "system");
             addLog(`   "언제 가능한가"`, "system");
-            reading.split('\n').filter(l => l.trim()).map(l => l.replace(/\[조언\]/g, '').trim()).filter(Boolean).forEach(line => addLog(line, "system"));
+            reading.split('\n').filter(l => l.trim()).map(l => l.replace(/\[조언\]/g, '').replace(/\s+$/, '')).filter(Boolean).forEach(line => addLog(line, "system"));
             const remainingDraws = 15 - (newSessionCount + 1);
             if (isNegativeReading && remainingDraws > 0) {
               addLog("대응 가능한 궤적이다. 개입 여지가 있다.", "system");
@@ -918,7 +919,7 @@ export default function Terminal() {
           readingSucceeded = true;
           addLog(`✦ ${position.name}`, "system");
           addLog(`   "${position.question}"`, "system");
-          reading.split('\n').filter(l => l.trim()).map(l => l.replace(/\[조언\]/g, '').trim()).filter(Boolean).forEach(line => addLog(line, "system"));
+          reading.split('\n').filter(l => l.trim()).map(l => l.replace(/\[조언\]/g, '').replace(/\s+$/, '')).filter(Boolean).forEach(line => addLog(line, "system"));
           addLog("- - - - - - - - - - - - - - - -", "separator", false);
           accReadings = [...accReadings, {
             positionName: position.name,
@@ -1661,7 +1662,8 @@ export default function Terminal() {
     // 빈 입력(엔터)은 confirm 계열 스텝에서만 허용 (Y로 처리)
     const confirmSteps: FlowStep[] = ['confirm_plan', 'confirm_flow_config', 'confirm_context', 'confirm_identity', 'ask_flow_period', 'login'];
     if (input === '' && !confirmSteps.includes(step)) return;
-    addLog(input, 'user');
+    // 조언 버튼 센티넬은 사람 말투 대신 기계톤으로 echo
+    addLog(input === '__ADVICE_REQ__' ? '>> REQ: 조언' : input, 'user');
 
     // main
     if (step === 'main') {
@@ -1800,6 +1802,35 @@ export default function Terminal() {
       const isNoFollowUp = (s: string) =>
         /^(없어|없음|없다|괜찮아|괜찮음|됐어|됐다|그만|끝|아니|아니오|노|ㄴ|ㄴㄴ|no)$/i.test(s.trim());
 
+      // 이해 못함 감지 — 직전 해석을 이해 못한 경우 새 카드 없이 풀어 설명
+      const isConfusedIntent = (s: string) =>
+        /무슨\s*말|뭔\s*말|뭔\s*소리|이해\s*(가|를)?\s*안|이해\s*(가|를)?\s*못|이해가\s*안|모르겠|뭐라는|어렵다|어려워|풀어서|쉽게\s*설명|다시\s*설명|이게\s*무슨/.test(s);
+
+      if (isConfusedIntent(input) && readingSessionSummary) {
+        setIsProcessing(true);
+        addLog("■ 직전 해석을 풀어 설명한다.", "system");
+        try {
+          const res = await fetch('/api/conclude', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              sessionSummary: readingSessionSummary,
+              questionContext: questionContext.join(' '),
+              mode: 'explain',
+            }),
+          });
+          const data = await res.json();
+          const explanation: string = data.conclusion ?? '카드는 이미 말했다.';
+          addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
+          explanation.split('\n').filter(l => l.trim()).forEach(line => addLog(line, "system"));
+          addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
+        } catch {
+          addLog("■ 오라클 회선 불안정.", "system");
+        }
+        setIsProcessing(false);
+        return;
+      }
+
       if (isNoFollowUp(input) && sessionCount > 0 && questionContext.length === 0) {
         addLog("세션을 종료하겠는가?", "system");
         addLog("[Y] 메인으로   [N] 꼬리질문 입력", "system");
@@ -1831,8 +1862,8 @@ export default function Terminal() {
         return;
       }
 
-      // 조언 버튼 — analyze 없이 1장 플랜 직행
-      const isAdviceTrigger = input === '이 상황에서 나에게 조언을 해줘';
+      // 조언 버튼(센티넬) — analyze 없이 1장 플랜 직행
+      const isAdviceTrigger = input === '__ADVICE_REQ__';
       if (isAdviceTrigger) {
         const advicePlan: ReadingPlan = {
           type: 'QUESTION',
@@ -1841,7 +1872,8 @@ export default function Terminal() {
         };
         setReadingPlan(advicePlan);
         setQuestionAttempts(0);
-        setQuestionContext(prev => [...prev, input]);
+        // 컨텍스트에는 실제 의도를 담아 AI 해석 품질 유지
+        setQuestionContext(prev => [...prev, '이 상황에서 나에게 조언을 해줘']);
         await processPlanConfirmation(advicePlan);
         return;
       }

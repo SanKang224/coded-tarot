@@ -33,6 +33,13 @@ const WITCH_STYLE = `
     witch-shake 0.09s infinite;
   display: block;
 }
+.witch-dead {
+  color: #3a3a3a;
+  text-shadow: none;
+  animation: none;
+  opacity: 0.6;
+  display: block;
+}
 `;
 
 function injectWitchStyle() {
@@ -57,7 +64,8 @@ function parseClickable(text: string): Segment[] {
     // [조언] — 한국어 특수 버튼
     const adviceM = rest.match(/^\[조언\]/);
     if (adviceM) {
-      segments.push({ text: adviceM[0], clickValue: '이 상황에서 나에게 조언을 해줘' });
+      // 클릭 시 echo는 기계톤(>> REQ: 조언). 센티넬로 전달하고 Terminal에서 치환·처리
+      segments.push({ text: adviceM[0], clickValue: '__ADVICE_REQ__' });
       i += adviceM[0].length;
       continue;
     }
@@ -172,9 +180,9 @@ function WitchLogItem({
     }
   }, [skipTyping]);
 
-  // 완료 후 간헐적 글리치 (2~5초마다)
+  // 완료 후 간헐적 글리치 (2~5초마다) — 발광이 꺼지면(dead) 중단
   useEffect(() => {
-    if (!done) return;
+    if (!done || log.dead) { setGlitched(''); return; }
     const schedule = () => {
       glitchTimer.current = setTimeout(() => {
         // 1~2글자 깨뜨리기
@@ -195,11 +203,11 @@ function WitchLogItem({
     };
     schedule();
     return () => { if (glitchTimer.current) clearTimeout(glitchTimer.current); };
-  }, [done, log.text]);
+  }, [done, log.text, log.dead]);
 
   return (
-    <span className="witch-log" style={{ fontFamily: TERMINAL_FONT, fontSize: '16px', lineHeight: '1.8' }}>
-      {glitched || displayedText}
+    <span className={log.dead ? 'witch-dead' : 'witch-log'} style={{ fontFamily: TERMINAL_FONT, fontSize: '16px', lineHeight: '1.8' }}>
+      {log.dead ? log.text : (glitched || displayedText)}
     </span>
   );
 }

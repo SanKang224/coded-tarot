@@ -5,6 +5,7 @@ export type LogType = {
   text: string;
   type: 'system' | 'user' | 'separator' | 'witch';
   isTyping?: boolean;
+  dead?: boolean; // witch 독백 발광 종료 → 회색 죽은 글자 처리
 };
 
 // sessionStorage: 탭/브라우저 닫으면 초기화 → 새 방문은 항상 fresh
@@ -64,5 +65,10 @@ export function useTerminalLog() {
     sessionStorage.removeItem(STORAGE_KEY);
   };
 
-  return { logs, addLog, setLogs, clearLogs, isLoaded };
+  // witch 독백 발광을 일괄 종료 (회색 죽은 글자로 전환)
+  const extinguishWitchLogs = () => {
+    setLogs(prev => prev.map(l => (l.type === 'witch' ? { ...l, dead: true } : l)));
+  };
+
+  return { logs, addLog, setLogs, clearLogs, extinguishWitchLogs, isLoaded };
 }
