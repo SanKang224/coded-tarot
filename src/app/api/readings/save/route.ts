@@ -9,7 +9,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
   }
 
-  const { questionText, readingType, cards, readingContent, synthesis } = await request.json();
+  const { questionText, readingType, cards, readingContent, synthesis, sessionId } = await request.json();
 
   const { error } = await supabase
     .from('readings')
@@ -20,6 +20,7 @@ export async function POST(request: Request) {
       cards: cards ?? [],
       reading_content: readingContent ?? '',
       synthesis: synthesis ?? null,
+      session_id: sessionId ?? null,
     });
 
   if (error) {

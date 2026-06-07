@@ -60,7 +60,8 @@ ${questionContext || '없음'}
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           contents: [{ parts: [{ text: `${isExplain ? EXPLAIN_PROMPT : SYSTEM_PROMPT}\n\n${userPrompt}` }] }],
-          generationConfig: { temperature: 0.6, maxOutputTokens: 512 },
+          // maxOutputTokens 제거 — thinking 토큰이 budget을 먼저 소모해 출력이 잘리는 문제 방지
+          generationConfig: { temperature: 0.6 },
         }),
       }
     );

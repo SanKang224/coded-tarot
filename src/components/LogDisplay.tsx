@@ -86,6 +86,20 @@ function parseClickable(text: string): Segment[] {
       continue;
     }
 
+    // [질문 내역] / [결제 내역] — 가방 하위 메뉴
+    const historyM = rest.match(/^\[질문 내역\]/);
+    if (historyM) {
+      segments.push({ text: historyM[0], clickValue: '/history' });
+      i += historyM[0].length;
+      continue;
+    }
+    const payHistM = rest.match(/^\[결제 내역\]/);
+    if (payHistM) {
+      segments.push({ text: payHistM[0], clickValue: '/payments' });
+      i += payHistM[0].length;
+      continue;
+    }
+
     const enterM = rest.match(/^\[엔터\](?:\/Y)?/);
     if (enterM) {
       segments.push({ text: enterM[0], clickValue: '' });

@@ -130,6 +130,7 @@ export default function Terminal() {
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const stickToBottomRef = useRef<boolean>(true); // 사용자가 바닥 근처면 자동 추적, 위로 올리면 멈춤
+  const sessionIdRef = useRef<string>(''); // 스프레드(세션) 식별자 — 새 덱 생성 시 발급, 꼬리질문은 유지
 
   const [questionContext, setQuestionContext] = useState<string[]>([]);
   const [isOwner, setIsOwner] = useState<boolean>(true); // 본인 질문 여부
@@ -165,7 +166,8 @@ export default function Terminal() {
   const [choiceTexts, setChoiceTexts] = useState<{ opt1: string; opt2: string } | null>(null); // CHOICE 예시 텍스트 저장
   const [userId, setUserId] = useState<string>(''); // Supabase user.id (TossPaymentModal customerKey용)
   const [paymentPackageId, setPaymentPackageId] = useState<number | null>(null); // 열린 토스 결제 모달의 패키지 ID
-  const [bagReadings, setBagReadings] = useState<Array<{ created_at: string; question_text: string; reading_type: string; reading_content: string }>>([]); // 가방 재생용 리딩 캐시
+  const [bagReadings, setBagReadings] = useState<Array<{ created_at: string; question_text: string; reading_type: string; count: number; reading_content: string }>>([]); // 가방 질문 내역(세션 그룹) 캐시 — 재생용
+  const [bagPayments, setBagPayments] = useState<Array<{ created_at: string; amount: number; tokens_added: number; package_name: string }>>([]); // 가방 결제 내역 캐시
   const currentOptions = step === 'login' ? LOGIN_OPTIONS : step === 'confirm_identity' ? ['Y', 'N'] : [];
 
   // ─────────────────────────────────────────────────────────
@@ -745,6 +747,7 @@ export default function Terminal() {
       addLog(">> 기존 스프레드를 불러왔다.", "system");
       await runDelay(300);
     } else {
+      sessionIdRef.current = crypto.randomUUID(); // 새 스프레드 → 새 세션
       const freshDeck = createFreshDeck();
       const { deck: shuffled, attempts: shuffleAttempts } = shuffleDeckWithAlignment(freshDeck);
       setCurrentDeck(shuffled);
@@ -1024,6 +1027,7 @@ export default function Terminal() {
             reading: r.reading,
           })),
           readingContent: newSnapshotBlock,
+          sessionId: sessionIdRef.current || undefined,
         }),
       }).catch(() => {/* 저장 실패는 무시 */});
     }
@@ -1059,6 +1063,7 @@ export default function Terminal() {
   const processReshuffle = async () => {
     if (sessionCount !== 0) return;
     setIsProcessing(true);
+    sessionIdRef.current = crypto.randomUUID(); // 재셔플 = 새 덱 → 새 세션
     const { deck: reshuffled, attempts } = shuffleDeckWithAlignment(createFreshDeck());
     setCurrentDeck(reshuffled);
     setDrawnCards([]);
@@ -1100,6 +1105,7 @@ export default function Terminal() {
 
   const processNewSession = async () => {
     setIsProcessing(true);
+    sessionIdRef.current = crypto.randomUUID(); // 새 세션
     const freshDeck = createFreshDeck();
     const shuffled = shuffleDeck(freshDeck);
     setCurrentDeck(shuffled);
@@ -1178,6 +1184,15 @@ export default function Terminal() {
     return `${d.getFullYear()}.${String(d.getMonth()+1).padStart(2,'0')}.${String(d.getDate()).padStart(2,'0')} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
   };
 
+  const providerLabel = (p: string) => {
+    switch ((p || '').toLowerCase()) {
+      case 'google': return '구글';
+      case 'kakao': return '카카오';
+      case 'email': return '이메일';
+      default: return p || '알 수 없음';
+    }
+  };
+
   const openBag = async () => {
     setIsProcessing(true);
     addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
@@ -1190,59 +1205,86 @@ export default function Terminal() {
       } else {
         const data = await res.json();
 
-        const balance: number = data.tokenBalance ?? 0;
-        const adminFlag: boolean = data.isAdmin ?? false;
-        addLog(`TOKEN_BALANCE :: ${adminFlag ? '∞' : balance}`, "system");
-        addLog("", "system", false);
-
-        const readings: Array<{
+        const readingSessions: Array<{
           created_at: string;
           question_text: string;
           reading_type: string;
+          count: number;
           reading_content: string;
-        }> = data.readings ?? [];
-        setBagReadings(readings);
-
-        addLog("[ 질문 내역 ]", "system");
-        if (readings.length === 0) {
-          addLog("  기록 없음.", "system");
-        } else {
-          addLog(`  최근 ${readings.length}건 — [재생]을 누르면 그날의 기록이 다시 흐른다.`, "system");
-          addLog("", "system", false);
-          readings.forEach((r, i) => {
-            const nn = String(i + 1).padStart(2, '0');
-            const title = r.question_text?.trim()
-              ? `${r.question_text.slice(0, 40)}${r.question_text.length > 40 ? '…' : ''}`
-              : '(제목 없음)';
-            addLog(`  [${nn}] ${fmtDate(r.created_at)}`, "system");
-            addLog(`       Q: ${title}   [재생 ${nn}]`, "system");
-            if (i < readings.length - 1) addLog("", "system", false);
-          });
-        }
-        addLog("", "system", false);
-
+        }> = data.readingSessions ?? [];
         const payments: Array<{
           created_at: string;
           amount: number;
           tokens_added: number;
           package_name: string;
         }> = data.payments ?? [];
+        setBagReadings(readingSessions);
+        setBagPayments(payments);
 
-        addLog("[ 결제 내역 ]", "system");
-        if (payments.length === 0) {
-          addLog("  결제 내역 없음.", "system");
-        } else {
-          payments.forEach((p, i) => {
-            addLog(`  [${String(i+1).padStart(2,'0')}] ${fmtDate(p.created_at)}`, "system");
-            addLog(`       ${p.package_name}  ${p.amount.toLocaleString()}원  +${p.tokens_added}토큰`, "system");
-            if (i < payments.length - 1) addLog("", "system", false);
-          });
-          addLog("", "system", false);
-          addLog("  ※ 결제 내역은 3년간 보관 후 자동 삭제된다.", "system");
-        }
+        // ── 내 정보 ─────────────────────────────────
+        addLog("[ 내 정보 ]", "system");
+        addLog(`  경로: ${providerLabel(data.provider)}`, "system");
+        addLog(`  계정: ${data.email || '(알 수 없음)'}`, "system");
+        addLog("", "system", false);
+
+        // ── 잔여 토큰 ───────────────────────────────
+        const balance: number = data.tokenBalance ?? 0;
+        const adminFlag: boolean = data.isAdmin ?? false;
+        addLog(`  잔여 토큰: ${adminFlag ? '∞' : balance}`, "system");
+        addLog("", "system", false);
+
+        // ── 조회 메뉴 ───────────────────────────────
+        addLog(`[질문 내역]  스프레드 ${readingSessions.length}건`, "system");
+        addLog(`[결제 내역]  결제 ${payments.length}건`, "system");
       }
     } catch {
       addLog("■ 기록 회선 불안정.", "system");
+    }
+    addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
+    setStep('main');
+    setIsProcessing(false);
+  };
+
+  // 질문 내역 — 스프레드(세션) 단위. [재생]으로 최초질문+꼬리질문 전체 재생
+  const showQuestionHistory = async () => {
+    setIsProcessing(true);
+    addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
+    addLog("[ 질문 내역 ]", "system");
+    if (bagReadings.length === 0) {
+      addLog("  기록 없음.", "system");
+    } else {
+      addLog("  [재생]을 누르면 최초질문과 꼬리질문이 차례로 다시 흐른다.", "system");
+      addLog("", "system", false);
+      bagReadings.forEach((r, i) => {
+        const nn = String(i + 1).padStart(2, '0');
+        const title = r.question_text?.trim()
+          ? `${r.question_text.slice(0, 38)}${r.question_text.length > 38 ? '…' : ''}`
+          : '(제목 없음)';
+        const tail = r.count > 1 ? `  (+꼬리 ${r.count - 1})` : '';
+        addLog(`  [${nn}] ${fmtDate(r.created_at)}${tail}`, "system");
+        addLog(`       Q: ${title}   [재생 ${nn}]`, "system");
+        if (i < bagReadings.length - 1) addLog("", "system", false);
+      });
+    }
+    addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
+    setStep('main');
+    setIsProcessing(false);
+  };
+
+  const showPaymentHistory = async () => {
+    setIsProcessing(true);
+    addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
+    addLog("[ 결제 내역 ]", "system");
+    if (bagPayments.length === 0) {
+      addLog("  결제 내역 없음.", "system");
+    } else {
+      bagPayments.forEach((p, i) => {
+        addLog(`  [${String(i+1).padStart(2,'0')}] ${fmtDate(p.created_at)}`, "system");
+        addLog(`       ${p.package_name}  ${p.amount.toLocaleString()}원  +${p.tokens_added}토큰`, "system");
+        if (i < bagPayments.length - 1) addLog("", "system", false);
+      });
+      addLog("", "system", false);
+      addLog("  ※ 결제 내역은 3년간 보관 후 자동 삭제된다.", "system");
     }
     addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
     setStep('main');
@@ -1309,9 +1351,21 @@ export default function Terminal() {
       return;
     }
 
-    // /bag — 가방(질문 내역) 열기 ([종료] 복귀 포함)
+    // /bag — 가방 열기 ([종료] 복귀 포함)
     if (input.trim().toLowerCase() === '/bag') {
       await openBag();
+      return;
+    }
+
+    // /history — 질문 내역 조회 ([질문 내역] 버튼)
+    if (input.trim().toLowerCase() === '/history') {
+      await showQuestionHistory();
+      return;
+    }
+
+    // /payments — 결제 내역 조회 ([결제 내역] 버튼)
+    if (input.trim().toLowerCase() === '/payments') {
+      await showPaymentHistory();
       return;
     }
 
@@ -1562,6 +1616,7 @@ export default function Terminal() {
           setReadingPlan(plan);
           addLog(`>> 설정 확정: ${n}장 / ${unit}단위`, "system");
           await runDelay(300);
+          sessionIdRef.current = crypto.randomUUID(); // 새 스프레드(FLOW) → 새 세션
           const { deck: reshuffled, attempts } = shuffleDeckWithAlignment(createFreshDeck());
           setCurrentDeck(reshuffled);
           setDeckIndex(0);
