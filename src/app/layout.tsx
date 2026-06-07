@@ -43,7 +43,7 @@ export default function RootLayout({
       <body
         className={`${robotoMono.variable} ${notoSansKr.variable} font-kr bg-black w-full flex flex-col items-center overflow-hidden`}
         style={{
-          height: 'var(--app-h, 100dvh)',
+          height: 'var(--app-h, 100svh)',
           paddingTop: 'env(safe-area-inset-top)',
           paddingBottom: 'env(safe-area-inset-bottom)',
           paddingLeft: 'env(safe-area-inset-left)',
@@ -51,7 +51,7 @@ export default function RootLayout({
         }}
       >
         <ViewportHeight />
-        <main className="flex-1 min-h-0 w-full flex items-center justify-center overflow-hidden py-2">
+        <main className="flex-1 min-h-0 w-full flex items-center justify-center overflow-hidden px-3 py-2">
           {children}
         </main>
         <Footer />
