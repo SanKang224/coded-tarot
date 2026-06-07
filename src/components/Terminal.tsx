@@ -2328,7 +2328,7 @@ export default function Terminal() {
   if (!isLoaded) return null;
 
   return (
-    <div className="w-full max-w-[468.5px] min-w-0 flex-1 min-h-0 max-h-[1002px] border border-[#00FF41] rounded-[20px] sm:rounded-[45px] p-[20px] bg-black flex flex-col relative mx-auto shadow-[0_0_20px_rgba(0,255,65,0.2)] overflow-hidden">
+    <div className="w-full max-w-[468.5px] min-w-0 h-full max-h-[1002px] border border-[#00FF41] rounded-[20px] sm:rounded-[45px] p-[20px] bg-black flex flex-col relative mx-auto shadow-[0_0_20px_rgba(0,255,65,0.2)] overflow-hidden">
 
       {/* 상단 배너 */}
       <div

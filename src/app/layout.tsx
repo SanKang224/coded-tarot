@@ -52,7 +52,7 @@ export default function RootLayout({
         }}
       >
         <ViewportHeight />
-        <main className="flex-1 min-h-0 w-full flex flex-col items-center justify-center overflow-hidden px-3 py-2">
+        <main className="flex-1 min-h-0 w-full overflow-hidden px-3 py-2">
           {children}
         </main>
         <Footer />
