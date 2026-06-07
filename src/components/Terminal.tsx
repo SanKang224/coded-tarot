@@ -1170,6 +1170,13 @@ export default function Terminal() {
       return;
     }
 
+    // /clear — 터미널 로그 초기화 (새로고침 없이 화면만 정리)
+    if (input.trim().toLowerCase() === '/clear') {
+      clearLogs();
+      addLog('[SYS] 터미널이 초기화되었다.', 'system', false);
+      return;
+    }
+
     // /logout
     if (input.trim().toLowerCase() === '/logout') {
       addLog('/logout', 'user');

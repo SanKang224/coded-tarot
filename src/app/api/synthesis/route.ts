@@ -62,7 +62,7 @@ ${readingsSummary}
           contents: [{ parts: [{ text: fullPrompt }] }],
           generationConfig: {
             temperature: 0.85,
-            maxOutputTokens: 1024,
+            // maxOutputTokens 제거 — thinking 토큰 포함 한도로 인한 중간 잘림 방지
           },
         }),
       }

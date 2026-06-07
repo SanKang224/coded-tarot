@@ -42,10 +42,11 @@ export function useTerminalLog() {
     setIsLoaded(true);
   }, []);
 
-  // 로그 변경 시 sessionStorage에 저장
+  // 로그 변경 시 sessionStorage에 저장 (200개 초과 시 오래된 항목 자동 트림)
   useEffect(() => {
     if (isLoaded && logs.length > 0) {
-      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(logs));
+      const toSave = logs.length > 200 ? logs.slice(-200) : logs;
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
     }
   }, [logs, isLoaded]);
 
