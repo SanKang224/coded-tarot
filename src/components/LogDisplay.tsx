@@ -242,7 +242,7 @@ function WitchLogItem({
   }, [done, log.text, log.dead]);
 
   return (
-    <span className={log.dead ? 'witch-dead' : 'witch-log'} style={{ fontFamily: TERMINAL_FONT, fontSize: '16px', lineHeight: '1.8' }}>
+    <span className={log.dead ? 'witch-dead' : 'witch-log'} style={{ fontFamily: TERMINAL_FONT, fontSize: '16px', lineHeight: '1.8', whiteSpace: 'pre-wrap' }}>
       {log.dead ? log.text : (glitched || displayedText)}
     </span>
   );

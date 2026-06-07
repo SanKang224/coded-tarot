@@ -7,14 +7,15 @@ type InputLineProps = {
   onArrowKey?: (key: 'ArrowUp' | 'ArrowDown') => void;
   disabled?: boolean;
   allowEmpty?: boolean; // 빈 엔터 허용 (confirm 스텝에서 Y로 처리)
+  focusKey?: string | number; // 값이 바뀌면 입력창을 다시 포커스 (버튼 클릭으로 포커스 뺏긴 경우 복구)
 };
 
-export default function InputLine({ onSubmit, onArrowKey, disabled, allowEmpty }: InputLineProps) {
+export default function InputLine({ onSubmit, onArrowKey, disabled, allowEmpty, focusKey }: InputLineProps) {
   const ref = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
     if (!disabled) ref.current?.focus();
-  }, [disabled]);
+  }, [disabled, focusKey]);
 
   // textarea 높이 자동 조절 (최대 4줄)
   const autoResize = () => {

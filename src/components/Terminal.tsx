@@ -1280,6 +1280,7 @@ export default function Terminal() {
 
   // 작업 후 다음 행동 가이드 — QTB 선택 프롬프트
   const showMenuPrompt = () => {
+    extinguishWitchLogs(); // 재생 독백이 있었다면 회색으로 꺼뜨림
     addLog("■ 무엇을 하고 싶은가?", "system");
     addLog("[Q] 질문   [T] 토큰   [B] 가방", "system");
     setIdentityConfirmed(false);
@@ -1340,6 +1341,7 @@ export default function Terminal() {
 
   // 질문 내역 — 스프레드(세션) 단위. 방향키·엔터 또는 줄 클릭으로 선택 → 재생
   const showQuestionHistory = async () => {
+    extinguishWitchLogs(); // 직전 재생 독백을 회색으로 꺼뜨림
     addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
     addLog("[ 질문 내역 ]", "system");
     if (bagReadings.length === 0) {
@@ -1384,14 +1386,15 @@ export default function Terminal() {
     addLog(`▶ 기록 재생 :: [${String(n).padStart(2,'0')}]  ${fmtDate(r.created_at)}`, "system");
     await runDelay(600);
 
+    // 재생은 온보딩 독백처럼 글리치·네온(witch) 효과로 흐른다
     const lines = (r.reading_content || '').split('\n');
     for (const line of lines) {
       const clean = line.replace(/\s+$/, '');
       if (clean.trim() === '') {
         addLog('', 'system', false);
       } else {
-        addLog(clean, 'system', true);
-        await runDelay(240);
+        addLog(clean, 'witch', true);
+        await runDelay(160);
       }
     }
 
@@ -2400,6 +2403,7 @@ export default function Terminal() {
             onSubmit={handleUserInput}
             onArrowKey={handleArrowKey}
             disabled={isProcessing}
+            focusKey={`${step}-${logs.length}`}
             allowEmpty={(['confirm_plan', 'confirm_flow_config', 'confirm_context', 'confirm_identity', 'ask_flow_period', 'confirm_new_topic', 'token_shop_confirm', 'login', 'confirm_end_session', 'bag_history'] as FlowStep[]).includes(step)}
           />
         </div>
