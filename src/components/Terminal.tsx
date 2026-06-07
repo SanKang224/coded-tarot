@@ -2328,7 +2328,7 @@ export default function Terminal() {
   if (!isLoaded) return null;
 
   return (
-    <div className="w-full max-w-[468.5px] flex-1 min-h-0 max-h-[1002px] border border-[#00FF41] rounded-[20px] sm:rounded-[45px] p-[20px] bg-black flex flex-col relative mx-auto shadow-[0_0_20px_rgba(0,255,65,0.2)] overflow-hidden">
+    <div className="w-full max-w-[468.5px] min-w-0 flex-1 min-h-0 max-h-[1002px] border border-[#00FF41] rounded-[20px] sm:rounded-[45px] p-[20px] bg-black flex flex-col relative mx-auto shadow-[0_0_20px_rgba(0,255,65,0.2)] overflow-hidden">
 
       {/* 상단 배너 */}
       <div
@@ -2346,11 +2346,11 @@ export default function Terminal() {
           gap: '6px',
         }}
       >
-        <span style={{ whiteSpace: 'nowrap' }}>[WITCH&apos;S TERMINAL v0.0]</span>
-        <span style={{ flex: 1, overflow: 'hidden', color: 'rgba(0,255,65,0.3)', letterSpacing: '0.08em', textAlign: 'center', userSelect: 'none' }}>
+        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 1, minWidth: 0 }}>[WITCH&apos;S TERMINAL v0.0]</span>
+        <span style={{ flex: 1, minWidth: '8px', overflow: 'hidden', color: 'rgba(0,255,65,0.3)', letterSpacing: '0.08em', textAlign: 'center', userSelect: 'none', whiteSpace: 'nowrap' }}>
           {'─'.repeat(20)}
         </span>
-        <span style={{ whiteSpace: 'nowrap', color: isAdmin ? '#FFD700' : !isLoggedIn ? '#00FF41' : tokenCount <= 0 ? '#FF3300' : '#00FF41' }}>
+        <span style={{ whiteSpace: 'nowrap', flexShrink: 0, color: isAdmin ? '#FFD700' : !isLoggedIn ? '#00FF41' : tokenCount <= 0 ? '#FF3300' : '#00FF41' }}>
           {isAdmin ? '[TOKEN: ∞]' : !isLoggedIn ? '[TOKEN: ?]' : `[TOKEN: ${tokenCount}]`}
         </span>
       </div>
