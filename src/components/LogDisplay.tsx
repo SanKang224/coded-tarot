@@ -70,6 +70,22 @@ function parseClickable(text: string): Segment[] {
       continue;
     }
 
+    // [재생 NN] — 가방 기록 재생
+    const replayM = rest.match(/^\[재생\s+(\d+)\]/);
+    if (replayM) {
+      segments.push({ text: replayM[0], clickValue: `/replay ${parseInt(replayM[1], 10)}` });
+      i += replayM[0].length;
+      continue;
+    }
+
+    // [종료] — 재생 종료 후 가방으로 복귀
+    const endM = rest.match(/^\[종료\]/);
+    if (endM) {
+      segments.push({ text: endM[0], clickValue: '/bag' });
+      i += endM[0].length;
+      continue;
+    }
+
     const enterM = rest.match(/^\[엔터\](?:\/Y)?/);
     if (enterM) {
       segments.push({ text: enterM[0], clickValue: '' });

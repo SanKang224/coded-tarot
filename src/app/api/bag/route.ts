@@ -19,7 +19,7 @@ export async function GET() {
   // 리딩 기록 (최근 10건)
   const { data: readings } = await supabase
     .from('readings')
-    .select('id, created_at, question_text, reading_type, cards, synthesis')
+    .select('id, created_at, question_text, reading_type, cards, reading_content, synthesis')
     .eq('user_id', user.id)
     .order('created_at', { ascending: false })
     .limit(10);

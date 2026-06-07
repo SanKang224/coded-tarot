@@ -4,12 +4,14 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 
 const FONT = 'var(--font-roboto-mono), var(--font-noto-sans-kr), "Courier New", monospace';
 const CLIENT_KEY = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY!;
-const TOSS_SCRIPT_SRC = 'https://js.tosspayments.com/v1/payment-widget';
+// Toss Payments SDK v2 (결제위젯) — CDN이 window.TossPayments로 주입
+const TOSS_SCRIPT_SRC = 'https://js.tosspayments.com/v2/standard';
 
-// Toss Payment Widget instance (CDN이 window.PaymentWidget으로 주입)
-type TossWidget = {
-  renderPaymentMethods: (selector: string, opts: { value: number }) => Promise<unknown>;
-  renderAgreement: (selector: string, opts: { variantKey: string }) => Promise<unknown>;
+// v2 결제위젯 인스턴스 타입
+type TossWidgets = {
+  setAmount: (amount: { currency: string; value: number }) => Promise<void>;
+  renderPaymentMethods: (opts: { selector: string; variantKey?: string }) => Promise<unknown>;
+  renderAgreement: (opts: { selector: string; variantKey?: string }) => Promise<unknown>;
   requestPayment: (opts: {
     orderId: string;
     orderName: string;
@@ -17,6 +19,10 @@ type TossWidget = {
     failUrl: string;
   }) => Promise<void>;
 };
+type TossPaymentsInstance = {
+  widgets: (opts: { customerKey: string }) => TossWidgets;
+};
+type TossPaymentsFn = ((clientKey: string) => TossPaymentsInstance) & { ANONYMOUS: string };
 
 export const TOSS_PACKAGES = [
   { id: 1, tokens: 3,  amount: 990,  label: '3토큰   —   990원',  name: 'CODED TAROT 3토큰' },
@@ -32,7 +38,7 @@ type Props = {
 
 export default function TossPaymentModal({ packageId, userId, onClose }: Props) {
   const pkg = TOSS_PACKAGES.find(p => p.id === packageId)!;
-  const widgetRef = useRef<TossWidget | null>(null);
+  const widgetRef = useRef<TossWidgets | null>(null);
   const mountedRef = useRef(true);
   const [widgetReady, setWidgetReady] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -47,11 +53,10 @@ export default function TossPaymentModal({ packageId, userId, onClose }: Props) 
   const initWidget = useCallback(async () => {
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const PaymentWidget = (window as any).PaymentWidget as
-        ((key: string, customer: string) => TossWidget) | undefined;
+      const TossPayments = (window as any).TossPayments as TossPaymentsFn | undefined;
 
-      if (!PaymentWidget) {
-        console.error('[TossPaymentModal] window.PaymentWidget not found after script load');
+      if (!TossPayments) {
+        console.error('[TossPaymentModal] window.TossPayments not found after script load');
         if (mountedRef.current) {
           setError('결제 모듈을 찾을 수 없다. 페이지를 새로고침하라.');
           setLoading(false);
@@ -59,12 +64,17 @@ export default function TossPaymentModal({ packageId, userId, onClose }: Props) 
         return;
       }
 
-      const widget = PaymentWidget(CLIENT_KEY, userId);
-      await widget.renderPaymentMethods('#toss-payment-methods', { value: pkg.amount });
-      await widget.renderAgreement('#toss-payment-agreement', { variantKey: 'AGREEMENT' });
+      const tossPayments = TossPayments(CLIENT_KEY);
+      const widgets = tossPayments.widgets({
+        customerKey: userId || TossPayments.ANONYMOUS,
+      });
+
+      await widgets.setAmount({ currency: 'KRW', value: pkg.amount });
+      await widgets.renderPaymentMethods({ selector: '#toss-payment-methods', variantKey: 'DEFAULT' });
+      await widgets.renderAgreement({ selector: '#toss-payment-agreement', variantKey: 'AGREEMENT' });
 
       if (mountedRef.current) {
-        widgetRef.current = widget;
+        widgetRef.current = widgets;
         setWidgetReady(true);
         setLoading(false);
       }
@@ -81,7 +91,7 @@ export default function TossPaymentModal({ packageId, userId, onClose }: Props) 
   // 스크립트가 이미 로드되어 있으면 onLoad를 기다리지 않고 즉시 초기화
   useEffect(() => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    if (typeof window !== 'undefined' && (window as any).PaymentWidget) {
+    if (typeof window !== 'undefined' && (window as any).TossPayments) {
       initWidget();
     }
   }, [initWidget]);

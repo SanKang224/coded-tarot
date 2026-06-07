@@ -17,35 +17,15 @@ export async function POST(req: Request) {
   }
 
   // 환경변수에서 코드 조회: PROMO_CODE_<CODE> 형태
-  const envKey = `PROMO_CODE_${code.toUpperCase()}`;
-  const tokensRaw = process.env[envKey];
+  const codeUpper = code.toUpperCase();
+  const tokensRaw = process.env[`PROMO_CODE_${codeUpper}`];
   const tokensToAdd = tokensRaw ? parseInt(tokensRaw, 10) : 0;
 
   if (!tokensToAdd) {
     return NextResponse.json({ error: 'INVALID_CODE' }, { status: 400 });
   }
 
-  // 총 사용 횟수 확인 (코드별 100명 제한)
-  const { count } = await supabase
-    .from('code_redemptions')
-    .select('*', { count: 'exact', head: true })
-    .eq('code', code.toUpperCase());
-
-  if ((count ?? 0) >= 100) {
-    return NextResponse.json({ error: 'INVALID_CODE' }, { status: 400 });
-  }
-
-  // 중복 사용 여부 확인 (unique 제약으로 insert 실패 = 이미 사용)
-  const { error: insertError } = await supabase
-    .from('code_redemptions')
-    .insert({ user_id: user.id, code: code.toUpperCase() });
-
-  if (insertError) {
-    // unique 제약 위반 = 이미 사용한 코드
-    return NextResponse.json({ error: 'ALREADY_USED' }, { status: 409 });
-  }
-
-  // 현재 잔액 조회 후 지급
+  // 프로필 먼저 조회 (잔액 + 관리자 여부)
   const { data: profile, error: fetchError } = await supabase
     .from('profiles')
     .select('token_balance, is_admin')
@@ -56,6 +36,34 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'PROFILE_NOT_FOUND' }, { status: 404 });
   }
 
+  const isAdmin = profile.is_admin ?? false;
+
+  // 관리자(테스트)는 1회 제한·중복 검사를 건너뛰고 반복 지급 허용
+  let redemptionInserted = false;
+  if (!isAdmin) {
+    // 총 사용 횟수 확인 (코드별 100명 제한)
+    const { count } = await supabase
+      .from('code_redemptions')
+      .select('*', { count: 'exact', head: true })
+      .eq('code', codeUpper);
+
+    if ((count ?? 0) >= 100) {
+      return NextResponse.json({ error: 'INVALID_CODE' }, { status: 400 });
+    }
+
+    // 중복 사용 여부 확인 (unique 제약으로 insert 실패 = 이미 사용)
+    const { error: insertError } = await supabase
+      .from('code_redemptions')
+      .insert({ user_id: user.id, code: codeUpper });
+
+    if (insertError) {
+      // unique 제약 위반 = 이미 사용한 코드
+      return NextResponse.json({ error: 'ALREADY_USED' }, { status: 409 });
+    }
+    redemptionInserted = true;
+  }
+
+  // 토큰 지급
   const newBalance = (profile.token_balance ?? 0) + tokensToAdd;
 
   const { data: updated, error: updateError } = await supabase
@@ -66,6 +74,14 @@ export async function POST(req: Request) {
     .single();
 
   if (updateError || !updated) {
+    // 지급 실패 시 방금 남긴 사용 기록을 되돌려(rollback) 부분실패 잠금을 방지
+    if (redemptionInserted) {
+      await supabase
+        .from('code_redemptions')
+        .delete()
+        .eq('user_id', user.id)
+        .eq('code', codeUpper);
+    }
     return NextResponse.json({ error: 'UPDATE_FAILED' }, { status: 500 });
   }
 
