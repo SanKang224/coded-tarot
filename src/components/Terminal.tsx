@@ -1325,7 +1325,7 @@ export default function Terminal() {
     addLog("- - - - - - - - - - - - - - - -", "separator");
     addLog("무엇을 알고 싶은가.", "system");
     addLog("마녀의 카드는 들을 준비가 되었다.", "system");
-    addLog("끊어 말해도 좋다. 다 게워냈거든 [입력 완료].", "system");
+    addLog("다듬지 마라. 날것일수록 좋다. [입력 완료].", "system");
     setStep('ask_question');
     setIsProcessing(false);
   };
@@ -2280,7 +2280,7 @@ export default function Terminal() {
         addLog("무엇을 알고 싶은가.", "system");
         await runDelay(400);
         addLog("마녀의 카드는 들을 준비가 되었다.", "system");
-        addLog("끊어 말해도 좋다. 다 게워냈거든 [입력 완료].", "system");
+        addLog("다듬지 마라. 날것일수록 좋다. [입력 완료].", "system");
         addLog("(/menu 입력 시 언제든 메인으로 돌아갈 수 있다.)", "system");
         setQuestionContext([]);
         setStep('ask_question');
@@ -2601,7 +2601,7 @@ export default function Terminal() {
           gap: '6px',
         }}
       >
-        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 1, minWidth: 0 }}>[WITCH&apos;S TERMINAL v0.0]</span>
+        <span style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis', flexShrink: 1, minWidth: 0 }}>[WITCH&apos;S TERMINAL v0.1]</span>
         <span style={{ flex: 1, minWidth: '8px', overflow: 'hidden', color: 'rgba(0,255,65,0.3)', letterSpacing: '0.08em', textAlign: 'center', userSelect: 'none', whiteSpace: 'nowrap' }}>
           {'─'.repeat(20)}
         </span>
