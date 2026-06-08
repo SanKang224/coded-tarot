@@ -13,6 +13,7 @@ type InputLineProps = {
 
 export default function InputLine({ onSubmit, onArrowKey, disabled, allowEmpty, focusKey, wantKeyboard = true }: InputLineProps) {
   const ref = useRef<HTMLTextAreaElement>(null);
+  const lastSubmitRef = useRef(0); // 중복 제출(keydown+keyup 동시 발생) 방지
 
   useEffect(() => {
     if (disabled) return;
@@ -38,6 +39,10 @@ export default function InputLine({ onSubmit, onArrowKey, disabled, allowEmpty, 
   const submitValue = () => {
     const val = ref.current?.value.trim() || '';
     if (!val && !allowEmpty) return;
+    // keydown과 keyup이 같은 Enter에 대해 둘 다 제출하는 것을 차단 (모바일/IME 환경 대응)
+    const now = Date.now();
+    if (now - lastSubmitRef.current < 120) return;
+    lastSubmitRef.current = now;
     if (ref.current) {
       ref.current.value = '';
       ref.current.style.height = 'auto';

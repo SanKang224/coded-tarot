@@ -2561,19 +2561,14 @@ export default function Terminal() {
           <div
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => { triggerSkipTyping(); if (!isProcessing) handleUserInput('__COMPOSE_DONE__'); }}
-            className="cursor-pointer my-2 inline-block"
+            className="cursor-pointer my-2"
             style={{
               fontFamily: 'var(--font-roboto-mono), var(--font-noto-sans-kr), "Courier New", monospace',
-              fontSize: '13px',
+              fontSize: '16px',
               color: '#00FF41',
-              background: '#000',
-              border: '1px solid #00FF41',
-              padding: '4px 12px',
               fontWeight: 'bold',
-              letterSpacing: '0.06em',
-              alignSelf: 'flex-start',
-              boxShadow: '0 0 6px rgba(0,255,65,0.5)',
-              textShadow: '0 0 5px rgba(0,255,65,0.8)',
+              textDecoration: 'underline',
+              textShadow: 'none',
             }}
           >
             [입력 완료]
