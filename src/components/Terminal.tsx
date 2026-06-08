@@ -11,6 +11,7 @@ import ShuffleOverlay from './ShuffleOverlay';
 import { getCardById } from '@/lib/tarotData';
 import CardGrid from './CardGrid';
 import TossPaymentModal, { TOSS_PACKAGES } from './TossPaymentModal';
+import { TERMS, PRIVACY, REFUND } from '@/lib/legalDocs';
 
 // ─────────────────────────────────────────────────────────
 // Types
@@ -1475,6 +1476,11 @@ export default function Terminal() {
         // ── 조회 메뉴 ───────────────────────────────
         addLog(`[기록]  스프레드 ${readingSessions.length}건`, "system");
         addLog(`[결제 내역]  결제 ${payments.length}건`, "system");
+        addLog("", "system", false);
+        // ── 법적 고지 ───────────────────────────────
+        addLog("[이용약관]", "system");
+        addLog("[개인정보처리방침]", "system");
+        addLog("[청약철회정책]", "system");
       }
     } catch {
       addLog("■ 기록 회선 불안정.", "system");
@@ -1523,6 +1529,25 @@ export default function Terminal() {
     showMenuPrompt();
     setIsProcessing(false);
   };
+
+  // 법적 고지 문서 출력 (이용약관/개인정보처리방침/청약철회정책)
+  const showLegalDoc = (kind: 'terms' | 'privacy' | 'refund') => {
+    const doc = kind === 'terms' ? TERMS : kind === 'privacy' ? PRIVACY : REFUND;
+    extinguishWitchLogs();
+    addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
+    doc.split('\n').forEach(line => addLog(line, "system", false));
+    addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
+    addLog("[가방으로 돌아가기]", "system");
+  };
+
+  // 푸터(초기화면 하단)의 법적 고지 링크 클릭 → 터미널에 문서 출력
+  const showLegalDocRef = useRef(showLegalDoc);
+  showLegalDocRef.current = showLegalDoc;
+  useEffect(() => {
+    const handler = (e: Event) => showLegalDocRef.current((e as CustomEvent).detail);
+    window.addEventListener('witch-legal', handler);
+    return () => window.removeEventListener('witch-legal', handler);
+  }, []);
 
   const replayReading = async (n: number) => {
     const r = bagReadings[n - 1];
@@ -1617,6 +1642,11 @@ export default function Terminal() {
       await showPaymentHistory();
       return;
     }
+
+    // 법적 고지 — [이용약관]/[개인정보처리방침]/[청약철회정책]
+    if (input.trim().toLowerCase() === '/terms') { showLegalDoc('terms'); return; }
+    if (input.trim().toLowerCase() === '/privacy') { showLegalDoc('privacy'); return; }
+    if (input.trim().toLowerCase() === '/refund') { showLegalDoc('refund'); return; }
 
     // /extract — 방금 재생한 기록을 클립보드로 추출 ([추출] 버튼)
     if (input.trim().toLowerCase() === '/extract') {

@@ -99,6 +99,31 @@ function parseClickable(text: string): Segment[] {
       i += backListM[0].length;
       continue;
     }
+    const backBagM = rest.match(/^\[가방으로 돌아가기\]/);
+    if (backBagM) {
+      segments.push({ text: backBagM[0], clickValue: '/bag' });
+      i += backBagM[0].length;
+      continue;
+    }
+    // 법적 고지 — 가방/푸터에서 문서 열기
+    const termsM = rest.match(/^\[이용약관\]/);
+    if (termsM) {
+      segments.push({ text: termsM[0], clickValue: '/terms' });
+      i += termsM[0].length;
+      continue;
+    }
+    const privacyM = rest.match(/^\[개인정보처리방침\]/);
+    if (privacyM) {
+      segments.push({ text: privacyM[0], clickValue: '/privacy' });
+      i += privacyM[0].length;
+      continue;
+    }
+    const refundM = rest.match(/^\[청약철회정책\]/);
+    if (refundM) {
+      segments.push({ text: refundM[0], clickValue: '/refund' });
+      i += refundM[0].length;
+      continue;
+    }
     // [제거] / [추출] — 재생 후 기록 조작
     const removeM = rest.match(/^\[제거\]/);
     if (removeM) {

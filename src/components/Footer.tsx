@@ -1,20 +1,57 @@
-const FONT = 'var(--font-roboto-mono), var(--font-noto-sans-kr), "Courier New", monospace';
+'use client';
 
-// 전자상거래법(제10조)상 사업자 신원정보 — 모든 페이지 초기화면 하단에 항상 노출
+const FONT = 'var(--font-roboto-mono), var(--font-noto-sans-kr), "Courier New", monospace';
+const GRAY = 'rgba(255,255,255,0.34)';
+const GRAY_LINK = 'rgba(255,255,255,0.5)';
+
+// 법적 고지 링크 클릭 → Terminal이 듣고 문서를 출력 (페이지 이동 없이 터미널 안에서)
+function openLegal(kind: 'terms' | 'privacy' | 'refund') {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('witch-legal', { detail: kind }));
+  }
+}
+
+const linkStyle: React.CSSProperties = {
+  background: 'transparent',
+  border: 'none',
+  padding: 0,
+  margin: 0,
+  fontFamily: FONT,
+  fontSize: '9px',
+  color: GRAY_LINK,
+  textDecoration: 'underline',
+  cursor: 'pointer',
+  textAlign: 'right',
+  lineHeight: 1.7,
+};
+
+// 전자상거래법상 사업자 신원정보 — 모든 페이지 초기화면 하단에 항상 노출
 export default function Footer() {
   return (
     <footer
-      className="w-full max-w-[468.5px] mx-auto px-5 pt-1 pb-4 shrink-0 text-center"
-      style={{ fontFamily: FONT, color: 'rgba(0,255,65,0.4)', fontSize: '10px', lineHeight: 1.7 }}
+      className="w-full max-w-[468.5px] mx-auto px-5 pt-1 pb-4 shrink-0"
+      style={{ fontFamily: FONT, color: GRAY, fontSize: '9px', lineHeight: 1.6 }}
     >
-      <div>상호: 코딩하는 마녀 | 대표자: 강산</div>
-      <div>사업자등록번호: 328-69-00642 | 통신판매업신고번호: [발급 후 기재]</div>
-      <div>주소: [이전 후 비상주 사무실 주소 기재]</div>
-      <div>
-        고객센터:{' '}
-        <a href="mailto:help@witchsterminal.dev" style={{ color: 'rgba(0,255,65,0.5)', textDecoration: 'underline' }}>
-          help@witchsterminal.dev
-        </a>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '10px' }}>
+        {/* 좌: 사업자 정보 */}
+        <div style={{ textAlign: 'left', flex: 1, minWidth: 0 }}>
+          <div>상호: 코딩하는 마녀 | 대표자: 강산</div>
+          <div>사업자등록번호: 328-69-00642</div>
+          <div>통신판매업신고번호: [발급 후 기재]</div>
+          <div>주소: [이전 후 비상주 사무실 주소 기재]</div>
+          <div>
+            고객센터:{' '}
+            <a href="mailto:help@witchsterminal.dev" style={{ color: GRAY_LINK, textDecoration: 'underline' }}>
+              help@witchsterminal.dev
+            </a>
+          </div>
+        </div>
+        {/* 우: 약관·방침·정책 */}
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px', whiteSpace: 'nowrap', flexShrink: 0 }}>
+          <button onClick={() => openLegal('terms')} style={linkStyle}>서비스 이용약관</button>
+          <button onClick={() => openLegal('privacy')} style={linkStyle}>개인정보처리방침</button>
+          <button onClick={() => openLegal('refund')} style={linkStyle}>청약철회정책</button>
+        </div>
       </div>
     </footer>
   );
