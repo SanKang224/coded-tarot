@@ -238,24 +238,36 @@ export default function Terminal() {
     const content = contentRef.current;
     if (!container || !content) return;
 
-    const NEAR = 24; // 바닥 인접 판정 여유(px)
-
     const updateHint = () => {
       const hidden = container.scrollHeight - container.scrollTop - container.clientHeight;
       setShowScrollHint(hidden > 40);
     };
 
-    let rafId = 0;
-    const follow = () => {
-      if (!stickToBottomRef.current) { updateHint(); return; }
-      cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(() => {
+    // 프로그램 스크롤 직후 발생하는 scroll 이벤트를 무시하기 위한 시간창.
+    // (자동 스크롤·키보드 리사이즈가 stick 판정을 흔들어 추적이 멈추던 문제 해결)
+    let lastProg = 0;
+    let rafPending = false;
+    const scrollToBottomNow = () => {
+      lastProg = performance.now();
+      container.scrollTop = container.scrollHeight; // 즉시(동기) — DOM은 이미 갱신됨
+      if (rafPending) return;
+      rafPending = true;
+      requestAnimationFrame(() => {                  // 늦은 레이아웃(폰트/줄바꿈) 보정
+        rafPending = false;
+        lastProg = performance.now();
         container.scrollTop = container.scrollHeight;
         updateHint();
       });
     };
 
+    const follow = () => {
+      if (!stickToBottomRef.current) { updateHint(); return; }
+      scrollToBottomNow();
+    };
+
     const onScroll = () => {
+      // 프로그램 스크롤이 유발한 이벤트는 stick 판정에서 제외 (사용자 의도만 반영)
+      if (performance.now() - lastProg < 150) { updateHint(); return; }
       stickToBottomRef.current =
         container.scrollHeight - container.scrollTop - container.clientHeight < 120;
       updateHint();
@@ -265,11 +277,12 @@ export default function Terminal() {
     const mo = new MutationObserver(follow);
     mo.observe(content, { childList: true, subtree: true, characterData: true });
 
+    // content 높이 변화 + container 높이 변화(키보드 열림/닫힘) 모두 추적
     const ro = new ResizeObserver(follow);
     ro.observe(content);
+    ro.observe(container);
 
     return () => {
-      cancelAnimationFrame(rafId);
       container.removeEventListener('scroll', onScroll);
       mo.disconnect();
       ro.disconnect();
