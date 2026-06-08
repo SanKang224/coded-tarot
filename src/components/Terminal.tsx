@@ -180,6 +180,7 @@ export default function Terminal() {
   const [bagPayments, setBagPayments] = useState<Array<{ created_at: string; amount: number; tokens_added: number; package_name: string }>>([]); // 가방 결제 내역 캐시
   const [replayIndex, setReplayIndex] = useState<number | null>(null); // 현재 재생 중인 기록의 인덱스 ([제거]/[추출] 대상)
   const replayLogIdsRef = useRef<string[]>([]); // 방금 재생한 기록 로그들의 id ([제거]/[추출] 시 회색·취소선 처리 대상)
+  const [questionDraft, setQuestionDraft] = useState<string[]>([]); // 카톡식 멀티라인 질문 작성 버퍼 ([입력 완료] 전까지 누적)
   const [pendingNav, setPendingNav] = useState<'Q' | 'B' | null>(null); // 스프레드 중 QTB 이동 확인 대기
   const [navReturnStep, setNavReturnStep] = useState<FlowStep>('ask_question'); // 이동 취소 시 복귀 단계
   const currentOptions = step === 'login' ? LOGIN_OPTIONS
@@ -1245,6 +1246,7 @@ export default function Terminal() {
     addLog("- - - - - - - - - - - - - - - -", "separator");
     addLog("무엇을 알고 싶은가.", "system");
     addLog("마녀의 카드는 들을 준비가 되었다.", "system");
+    addLog("한 줄씩 나눠 말해도 된다. 다 말했으면 [입력 완료].", "system");
     setStep('ask_question');
     setIsProcessing(false);
   };
@@ -1342,6 +1344,7 @@ export default function Terminal() {
   // 작업 후 다음 행동 가이드 — QTB 선택 프롬프트
   const showMenuPrompt = () => {
     extinguishWitchLogs(); // 재생 독백이 있었다면 회색으로 꺼뜨림
+    setQuestionDraft([]); // 작성 중이던 멀티라인 질문 버퍼 비움
     addLog("■ 무엇을 하고 싶은가?", "system");
     addLog("[Q] 질문   [T] 토큰   [B] 가방", "system");
     setIdentityConfirmed(false);
@@ -2169,6 +2172,7 @@ export default function Terminal() {
         addLog("무엇을 알고 싶은가.", "system");
         await runDelay(400);
         addLog("마녀의 카드는 들을 준비가 되었다.", "system");
+        addLog("한 줄씩 나눠 말해도 된다. 다 말했으면 [입력 완료].", "system");
         addLog("(/menu 입력 시 언제든 메인으로 돌아갈 수 있다.)", "system");
         setQuestionContext([]);
         setStep('ask_question');
@@ -2313,9 +2317,30 @@ export default function Terminal() {
         return;
       }
 
-      // 주제 일관성 감지: 이전 리딩이 있고(sessionCount > 0), 새 질문이 시작되는 시점(questionContext 비어있음)에만 체크
-      // 명시적 새 주제 의도 OR 카테고리가 다른 주제로 판단될 때 확인 요청
-      const updated = [...questionContext, input];
+      // ── 카톡식 멀티라인 작성 ──────────────────────────────
+      // 한 줄씩 누적하고, [입력 완료]/완료 입력 시 합쳐서 분석으로 넘긴다.
+      const isComposeDone = input === '__COMPOSE_DONE__'
+        || /^(완료|입력\s?완료|\/done)$/i.test(input.trim());
+
+      if (!isComposeDone) {
+        // 한 줄 누적 (카톡 메시지처럼 화면에 쌓인다)
+        const isFirstLine = questionDraft.length === 0;
+        addLog(input, 'user');
+        setQuestionDraft(prev => [...prev, input]);
+        if (isFirstLine) {
+          addLog("■ 한 줄씩 이어 말해도 된다. 다 말했으면 [입력 완료].", "system");
+        }
+        return;
+      }
+
+      // 마무리 — 누적된 줄을 하나로 합쳐 분석
+      if (questionDraft.length === 0) {
+        addLog("■ 아직 말한 것이 없다. 먼저 입력하라.", "system");
+        return;
+      }
+      const combined = questionDraft.join(' ');
+      setQuestionDraft([]);
+      const updated = [...questionContext, combined];
       setQuestionContext(updated);
       const isFollowUp = questionContext.length > 0;
       if (isFollowUp || identityConfirmed) {
@@ -2531,6 +2556,30 @@ export default function Terminal() {
           </div>
         )}
 
+        {/* 카톡식 작성 중 — 항상 보이는 [입력 완료] 버튼 */}
+        {step === 'ask_question' && questionDraft.length > 0 && !isProcessing && (
+          <div
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => { triggerSkipTyping(); if (!isProcessing) handleUserInput('__COMPOSE_DONE__'); }}
+            className="cursor-pointer my-2 inline-block"
+            style={{
+              fontFamily: 'var(--font-roboto-mono), var(--font-noto-sans-kr), "Courier New", monospace',
+              fontSize: '13px',
+              color: '#00FF41',
+              background: '#000',
+              border: '1px solid #00FF41',
+              padding: '4px 12px',
+              fontWeight: 'bold',
+              letterSpacing: '0.06em',
+              alignSelf: 'flex-start',
+              boxShadow: '0 0 6px rgba(0,255,65,0.5)',
+              textShadow: '0 0 5px rgba(0,255,65,0.8)',
+            }}
+          >
+            [입력 완료]
+          </div>
+        )}
+
         <div ref={bottomRef} className="h-4 shrink-0" />
         </div>
       </div>
@@ -2553,8 +2602,8 @@ export default function Terminal() {
             padding: '5px 14px',
             fontWeight: 'bold',
             letterSpacing: '0.08em',
-            boxShadow: '0 0 8px rgba(0,255,65,0.75), 0 0 18px rgba(0,255,65,0.4)', // 발광
-            textShadow: '0 0 6px rgba(0,255,65,0.9)',                              // 텍스트 네온
+            boxShadow: '0 0 8px rgba(0,255,65,0.75), 0 0 18px rgba(0,255,65,0.4)', // 박스만 발광
+            textShadow: 'none',                                                    // 글씨·화살표는 컬러만 (빛 없음)
           }}
         >
           ▼ 더 있음

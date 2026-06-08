@@ -138,6 +138,13 @@ function parseClickable(text: string): Segment[] {
       i += backMenuM[0].length;
       continue;
     }
+    // [입력 완료] — 카톡식 멀티라인 질문 작성 마무리
+    const composeDoneM = rest.match(/^\[입력 완료\]/);
+    if (composeDoneM) {
+      segments.push({ text: composeDoneM[0], clickValue: '__COMPOSE_DONE__' });
+      i += composeDoneM[0].length;
+      continue;
+    }
 
     const enterM = rest.match(/^\[엔터\](?:\/Y)?/);
     if (enterM) {
@@ -151,6 +158,14 @@ function parseClickable(text: string): Segment[] {
       const key = bracketLabelM[1][1];
       segments.push({ text: bracketLabelM[0], clickValue: key });
       i += bracketLabelM[0].length;
+      continue;
+    }
+
+    // [1] [2] [3] — 숫자 대괄호 (토큰 충전 패키지 등) 터치 선택
+    const bracketDigitM = rest.match(/^\[([1-9])\]/);
+    if (bracketDigitM) {
+      segments.push({ text: bracketDigitM[0], clickValue: bracketDigitM[1] });
+      i += bracketDigitM[0].length;
       continue;
     }
 
