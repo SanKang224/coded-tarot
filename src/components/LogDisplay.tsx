@@ -240,7 +240,10 @@ export default function LogDisplay({
       style={{ fontFamily: TERMINAL_FONT, fontSize: '16px', lineHeight: '1.8' }}
     >
       {logs.map((log) => (
-        <LogItem key={log.id} log={log} onTap={onTap} skipTyping={skipTyping} />
+        // id 노출 — 특정 로그(예: 법적 문서 첫 줄)를 외부에서 scrollIntoView로 정렬하기 위함.
+        <div key={log.id} id={`log-${log.id}`}>
+          <LogItem log={log} onTap={onTap} skipTyping={skipTyping} />
+        </div>
       ))}
     </div>
   );

@@ -1,6 +1,7 @@
 'use client';
 import Script from 'next/script';
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { REFUND } from '@/lib/legalDocs';
 
 const FONT = 'var(--font-roboto-mono), var(--font-noto-sans-kr), "Courier New", monospace';
 const CLIENT_KEY = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY!;
@@ -44,6 +45,8 @@ export default function TossPaymentModal({ packageId, userId, onClose }: Props) 
   const [loading, setLoading] = useState(true);
   const [paying, setPaying] = useState(false);
   const [error, setError] = useState('');
+  const [refundAgreed, setRefundAgreed] = useState(false); // 청약철회(환불) 정책 필수 동의
+  const [showRefund, setShowRefund] = useState(false); // 환불 정책 전문 패널 표시
 
   useEffect(() => {
     mountedRef.current = true;
@@ -104,7 +107,7 @@ export default function TossPaymentModal({ packageId, userId, onClose }: Props) 
   }, [initWidget]);
 
   const handlePay = async () => {
-    if (!widgetRef.current || paying) return;
+    if (!widgetRef.current || paying || !refundAgreed) return;
     setPaying(true);
     setError('');
 
@@ -169,6 +172,7 @@ export default function TossPaymentModal({ packageId, userId, onClose }: Props) 
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
+          position: 'relative',
         }}>
           {/* 헤더 (고정) */}
           <div style={{
@@ -218,27 +222,70 @@ export default function TossPaymentModal({ packageId, userId, onClose }: Props) 
             )}
             {widgetReady && (
               <div style={{ padding: '12px 20px 20px' }}>
+                {/* 청약철회(환불) 정책 필수 동의 */}
+                <div style={{ marginBottom: '12px' }}>
+                  <button
+                    onClick={() => setRefundAgreed(v => !v)}
+                    style={{
+                      display: 'flex', alignItems: 'flex-start', gap: '6px',
+                      background: 'transparent', border: 'none', padding: 0,
+                      color: '#00FF41', fontFamily: FONT, fontSize: '12px',
+                      lineHeight: 1.5, textAlign: 'left', cursor: 'pointer', width: '100%',
+                    }}
+                  >
+                    <span style={{ flexShrink: 0 }}>{refundAgreed ? '[x]' : '[ ]'}</span>
+                    <span>[필수] 구매 조건 확인 및 청약철회(환불) 정책에 동의한다. 디지털 콘텐츠를 이용(토큰 사용)하면 환불이 제한된다.</span>
+                  </button>
+                  <button
+                    onClick={() => setShowRefund(true)}
+                    style={{ background: 'transparent', border: 'none', padding: '4px 0 0 18px', color: 'rgba(0,255,65,0.6)', fontFamily: FONT, fontSize: '11px', textDecoration: 'underline', cursor: 'pointer' }}
+                  >
+                    청약철회정책 전문 보기
+                  </button>
+                </div>
                 <button
                   onClick={handlePay}
-                  disabled={paying}
+                  disabled={paying || !refundAgreed}
                   style={{
                     width: '100%',
-                    background: paying ? 'rgba(0,255,65,0.4)' : '#00FF41',
+                    background: (paying || !refundAgreed) ? 'rgba(0,255,65,0.4)' : '#00FF41',
                     color: '#000',
                     border: 'none',
                     padding: '13px',
                     fontFamily: FONT,
                     fontSize: '15px',
                     fontWeight: 'bold',
-                    cursor: paying ? 'default' : 'pointer',
+                    cursor: (paying || !refundAgreed) ? 'default' : 'pointer',
                     letterSpacing: '0.04em',
                   }}
                 >
-                  {paying ? '결제 진행 중...' : `${pkg.tokens}토큰 결제하기`}
+                  {paying ? '결제 진행 중...' : !refundAgreed ? '약관 동의 후 결제 가능' : `${pkg.tokens}토큰 결제하기`}
                 </button>
               </div>
             )}
           </div>
+
+          {/* 청약철회정책 전문 패널 (모달 내 오버레이) */}
+          {showRefund && (
+            <div style={{ position: 'absolute', inset: 0, background: '#000', zIndex: 3, display: 'flex', flexDirection: 'column' }}>
+              <div style={{
+                flexShrink: 0, borderBottom: '1px solid rgba(0,255,65,0.25)',
+                padding: '14px 20px', color: 'rgba(0,255,65,0.5)', fontSize: '12px',
+                display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+              }}>
+                <span>▶ 청약철회정책</span>
+                <button
+                  onClick={() => setShowRefund(false)}
+                  style={{ background: 'transparent', border: 'none', color: 'rgba(0,255,65,0.4)', cursor: 'pointer', fontFamily: FONT, fontSize: '12px' }}
+                >
+                  [닫기]
+                </button>
+              </div>
+              <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '16px 20px', color: '#00FF41', fontSize: '12px', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
+                {REFUND}
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </>

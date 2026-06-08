@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
+import { LEGAL_VERSIONS } from '@/lib/legalDocs';
 
 const TOSS_CONFIRM_URL = 'https://api.tosspayments.com/v1/payments/confirm';
 
@@ -152,6 +153,19 @@ export async function POST(req: Request) {
       console.error('[toss/confirm] update error:', updateErr);
       return NextResponse.json({ error: 'TOKEN_UPDATE_FAILED' }, { status: 500 });
     }
+  }
+
+  // 청약철회(환불) 정책 동의 이력 — 결제 모달의 필수 동의 체크를 통과해야만 결제가 진행된다.
+  // 감사 로그(best-effort): 기록 실패가 이미 완료된 결제를 되돌리지 않도록 throw하지 않는다.
+  const { error: consentErr } = await supabase.from('user_consents').insert({
+    user_id: user.id,
+    consent_type: 'refund_policy',
+    policy_version: LEGAL_VERSIONS.refund,
+    context: 'payment',
+    order_id: orderId,
+  });
+  if (consentErr) {
+    console.error('[toss/confirm] consent log error:', consentErr);
   }
 
   return NextResponse.json({

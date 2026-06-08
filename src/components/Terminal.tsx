@@ -11,7 +11,7 @@ import ShuffleOverlay from './ShuffleOverlay';
 import { getCardById } from '@/lib/tarotData';
 import CardGrid from './CardGrid';
 import TossPaymentModal, { TOSS_PACKAGES } from './TossPaymentModal';
-import { TERMS, PRIVACY, REFUND } from '@/lib/legalDocs';
+import { TERMS, PRIVACY, REFUND, LEGAL_VERSIONS } from '@/lib/legalDocs';
 
 // ─────────────────────────────────────────────────────────
 // Types
@@ -30,7 +30,7 @@ type ReadingPlan = {
 };
 
 type FlowStep =
-  | 'boot' | 'login' | 'login_email' | 'login_email_type' | 'login_email_pw' | 'main'
+  | 'boot' | 'consent' | 'login' | 'login_email' | 'login_email_type' | 'login_email_pw' | 'main'
   | 'ask_question' | 'confirm_identity' | 'analyzing'
   | 'confirm_context' | 'select_type' | 'confirm_plan'
   | 'confirm_flow_config' | 'ask_flow_period' | 'confirm_new_topic' | 'confirm_period_split'
@@ -52,6 +52,10 @@ const LOGIN_OPTIONS = ['google', 'kakao'];
 
 // 진행 중인 스프레드를 새로고침/결제 리다이렉트에도 복원하기 위한 sessionStorage 키
 const SPREAD_KEY = 'coded_tarot_spread';
+
+// 가입 동의 게이트는 로그인 전(비인증)에 통과하므로, 동의 내역을 잠시 보관했다가
+// OAuth 리다이렉트 복귀/로그인 직후 서버에 기록한다.
+const PENDING_CONSENT_KEY = 'coded_tarot_pending_consent';
 
 // ─────────────────────────────────────────────────────────
 // Parsers
@@ -237,6 +241,7 @@ export default function Terminal() {
   const [pendingPackageId, setPendingPackageId] = useState<number | null>(null); // 선택 중인 토큰 패키지
   const [pendingEmail, setPendingEmail] = useState<string>(''); // 이메일 로그인 중 임시 저장
   const [loginMode, setLoginMode] = useState<'login' | 'signup'>('login'); // 이메일 로그인/가입 모드
+  const [consents, setConsents] = useState({ age: false, terms: false, privacy: false }); // 가입 전 필수 동의
   const [pendingReshuffleCtx, setPendingReshuffleCtx] = useState<{ context: string[]; ownerFlag: boolean } | null>(null);
   const [readingSessionSummary, setReadingSessionSummary] = useState<string>(''); // 이번 세션 리딩 누적 요약 (덱 리셋에도 유지)
   const [choiceTexts, setChoiceTexts] = useState<{ opt1: string; opt2: string } | null>(null); // CHOICE 예시 텍스트 저장
@@ -249,6 +254,8 @@ export default function Terminal() {
   const [questionDraft, setQuestionDraft] = useState<string[]>([]); // 카톡식 멀티라인 질문 작성 버퍼 ([입력 완료] 전까지 누적)
   const [periodKind, setPeriodKind] = useState<PeriodKind | null>(null); // 단일 기간 분할 선택 대기 중인 기간 종류
   const lastSubmitRef = useRef<{ value: string; time: number }>({ value: '', time: 0 }); // 동일 입력 중복 제출 차단(경로 무관)
+  // 법적 문서를 출력할 때, 자동 하단 스크롤 대신 문서 첫 줄을 터미널 상단에 맞추기 위한 타겟 id.
+  const scrollAnchorIdRef = useRef<string | null>(null);
   const [pendingNav, setPendingNav] = useState<'Q' | 'B' | null>(null); // 스프레드 중 QTB 이동 확인 대기
   const [navReturnStep, setNavReturnStep] = useState<FlowStep>('ask_question'); // 이동 취소 시 복귀 단계
   const currentOptions = step === 'login' ? LOGIN_OPTIONS
@@ -360,7 +367,20 @@ export default function Terminal() {
 
   // 새 내용(로그/리딩/스텝/셔플)이 추가될 때마다 바닥으로 — 옵저버와 별개의 직접 트리거(이중 안전장치).
   // 사용자가 위로 올려둔 상태(stick=false)면 따라가지 않는다.
+  // 단, 법적 문서처럼 특정 라인을 상단에 맞춰야 하는 경우(anchor set)는 바닥 대신 anchor로 정렬한다.
   useEffect(() => {
+    const anchorId = scrollAnchorIdRef.current;
+    if (anchorId) {
+      const el = document.getElementById(`log-${anchorId}`);
+      if (el) {
+        scrollAnchorIdRef.current = null;
+        stickToBottomRef.current = false; // 이후 추가 라인(타이핑 등)이 바닥으로 끌어내리지 않도록
+        // 첫 렌더에서 즉시 + 다음 프레임에서 한 번 더 (레이아웃 보정)
+        el.scrollIntoView({ block: 'start' });
+        requestAnimationFrame(() => el.scrollIntoView({ block: 'start' }));
+        return;
+      }
+    }
     if (!stickToBottomRef.current) return;
     const c = scrollContainerRef.current;
     if (!c) return;
@@ -573,7 +593,10 @@ export default function Terminal() {
         setTokenCount(data.balance ?? 0);
         setIsAdmin(data.isAdmin ?? false);
         setIsLoggedIn(true);
-        if (user) setUserId(user.id);
+        if (user) {
+          setUserId(user.id);
+          void flushPendingConsent(); // 보관된 가입 동의가 있으면 서버에 기록
+        }
         const key = `onboarding_done_${user?.id}`;
         const alreadySeen = localStorage.getItem(key) === 'true';
         if (!alreadySeen && user) {
@@ -658,10 +681,42 @@ export default function Terminal() {
     await runDelay(400);
     addLog("14세 미만은 이용할 수 없다.", "system");
     await runDelay(800);
+    addLog("계속하려면 아래 필수 항목에 모두 동의하라.", "system");
+    setStep('consent');
+    setIsProcessing(false);
+  };
+
+  // 필수 동의 완료 → 로그인 방법 선택으로
+  // 동의 시각·버전을 보관 → 로그인 직후 flushPendingConsent()가 서버에 기록.
+  const proceedToLogin = () => {
+    try {
+      sessionStorage.setItem(PENDING_CONSENT_KEY, JSON.stringify({
+        agreedAt: new Date().toISOString(),
+        consents: [
+          { type: 'age_14', version: LEGAL_VERSIONS.age },
+          { type: 'terms', version: LEGAL_VERSIONS.terms },
+          { type: 'privacy', version: LEGAL_VERSIONS.privacy },
+        ],
+      }));
+    } catch { /* storage 불가 시 기록은 건너뜀 (게이트는 이미 통과) */ }
     addLog("로그인 방법을 선택하라.", "system");
     setMenuIndex(0);
     setStep('login');
-    setIsProcessing(false);
+  };
+
+  // 보관된 가입 동의를 서버에 기록 (best-effort). 로그인 성공 후 1회.
+  const flushPendingConsent = async () => {
+    if (typeof window === 'undefined') return;
+    const raw = sessionStorage.getItem(PENDING_CONSENT_KEY);
+    if (!raw) return;
+    sessionStorage.removeItem(PENDING_CONSENT_KEY);
+    try {
+      await fetch('/api/consent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: raw,
+      });
+    } catch { /* 감사 로그 기록 실패는 흐름을 막지 않는다 */ }
   };
 
   const processLoginFlow = async (option: string) => {
@@ -1530,14 +1585,20 @@ export default function Terminal() {
     setIsProcessing(false);
   };
 
-  // 법적 고지 문서 출력 (이용약관/개인정보처리방침/청약철회정책)
-  const showLegalDoc = (kind: 'terms' | 'privacy' | 'refund') => {
+  // 법적 고지 문서 출력 (이용약관/개인정보처리방침/청약철회정책).
+  // 문서는 길어서 맨 끝줄이 아니라 제목(첫 줄)이 터미널 상단에 오도록 정렬한다.
+  // 1) 첫 라인 id를 anchor로 잡고
+  // 2) 자동 하단 스크롤 추적을 끄고 (stickToBottomRef=false)
+  // 3) 다음 렌더에서 logs useEffect가 해당 id를 scrollIntoView({block:'start'})로 정렬한다.
+  const showLegalDoc = (kind: 'terms' | 'privacy' | 'refund', withBackLink = true) => {
     const doc = kind === 'terms' ? TERMS : kind === 'privacy' ? PRIVACY : REFUND;
     extinguishWitchLogs();
-    addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
+    stickToBottomRef.current = false; // 옵저버가 즉시 바닥으로 끌어내리는 것을 막는다
+    const firstId = addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
+    scrollAnchorIdRef.current = firstId;
     doc.split('\n').forEach(line => addLog(line, "system", false));
     addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
-    addLog("[가방으로 돌아가기]", "system");
+    if (withBackLink) addLog("[가방으로 돌아가기]", "system");
   };
 
   // 푸터(초기화면 하단)의 법적 고지 링크 클릭 → 터미널에 문서 출력
@@ -2671,6 +2732,48 @@ export default function Terminal() {
             onSelectAll={(deckIndices) => processCardDraw(deckIndices)}
           />
         )}
+
+        {/* 가입 전 필수 동의 게이트 */}
+        {step === 'consent' && !isProcessing && (() => {
+          const allChecked = consents.age && consents.terms && consents.privacy;
+          const items: Array<{ key: 'age' | 'terms' | 'privacy'; label: string; doc?: 'terms' | 'privacy' }> = [
+            { key: 'age', label: '[필수] 만 14세 이상입니다' },
+            { key: 'terms', label: '[필수] 서비스 이용약관 동의', doc: 'terms' },
+            { key: 'privacy', label: '[필수] 개인정보처리방침 동의', doc: 'privacy' },
+          ];
+          return (
+            <div className="flex flex-col gap-2 my-2" style={{ fontFamily: 'var(--font-roboto-mono), var(--font-noto-sans-kr), "Courier New", monospace', fontSize: '15px', color: '#00FF41' }}>
+              {items.map(item => (
+                <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                  <button
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => setConsents(c => ({ ...c, [item.key]: !c[item.key] }))}
+                    style={{ background: 'transparent', border: 'none', padding: 0, color: '#00FF41', fontFamily: 'inherit', fontSize: 'inherit', cursor: 'pointer', textAlign: 'left' }}
+                  >
+                    {consents[item.key] ? '[x]' : '[ ]'} {item.label}
+                  </button>
+                  {item.doc && (
+                    <button
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => { triggerSkipTyping(); showLegalDoc(item.doc!, false); }}
+                      style={{ background: 'transparent', border: 'none', padding: 0, color: 'rgba(0,255,65,0.6)', fontFamily: 'inherit', fontSize: '13px', cursor: 'pointer', textDecoration: 'underline' }}
+                    >
+                      보기
+                    </button>
+                  )}
+                </div>
+              ))}
+              <button
+                disabled={!allChecked}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => { if (allChecked) proceedToLogin(); }}
+                style={{ alignSelf: 'flex-start', marginTop: '6px', background: 'transparent', border: 'none', padding: 0, color: '#00FF41', fontFamily: 'inherit', fontSize: 'inherit', fontWeight: 'bold', textDecoration: 'underline', cursor: allChecked ? 'pointer' : 'default', opacity: allChecked ? 1 : 0.35 }}
+              >
+                [동의하고 계속]
+              </button>
+            </div>
+          );
+        })()}
 
         {/* 로그인 메뉴 */}
        {(step === 'login' || step === 'confirm_identity') && !isProcessing && (
