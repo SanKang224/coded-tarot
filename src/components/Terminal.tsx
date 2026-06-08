@@ -32,7 +32,7 @@ type FlowStep =
   | 'boot' | 'login' | 'login_email' | 'login_email_type' | 'login_email_pw' | 'main'
   | 'ask_question' | 'confirm_identity' | 'analyzing'
   | 'confirm_context' | 'select_type' | 'confirm_plan'
-  | 'confirm_flow_config' | 'ask_flow_period' | 'confirm_new_topic'
+  | 'confirm_flow_config' | 'ask_flow_period' | 'confirm_new_topic' | 'confirm_period_split'
   | 'ready_to_draw' | 'card_draw'
   | 'token_shop' | 'token_shop_confirm'
   | 'bag' | 'bag_history' | 'confirm_end_session' | 'confirm_nav';
@@ -117,6 +117,62 @@ function parseConfirmLines(text: string): string[] {
     .filter(l => l.length > 0 && !l.startsWith('CONFIRM'));
 }
 
+type PeriodKind = 'day' | 'week' | 'month' | 'year';
+
+// 단일 기간(오늘 하루/이번 주/이번 달/올해) 질문인지 판별.
+// "3개월" "6주" 처럼 숫자+단위가 명시되면 다중으로 보고 null(기존 흐름 유지).
+function detectSinglePeriod(text: string): PeriodKind | null {
+  if (/\d+\s*(개월|달|주|일|년|분기|개월치)/.test(text)) return null; // 명시적 다중
+  if (/올해|한\s?해|금년|올\s?한\s?해/.test(text)) return 'year';
+  if (/이번\s?달|이달|한\s?달|이번\s?월|이달치/.test(text)) return 'month';
+  if (/이번\s?주|이번주|한\s?주|금주/.test(text)) return 'week';
+  if (/오늘|하루|금일|today/i.test(text)) return 'day';
+  return null;
+}
+
+// 기간 분할 선택([1] 전체 1장 / [2],[3] 나눠보기)에 따라 리딩 플랜 생성.
+function buildPeriodPlan(kind: PeriodKind, choice: string): ReadingPlan | null {
+  const single = (label: string): ReadingPlan => ({
+    type: 'QUESTION', cardCount: 1,
+    positions: [{ name: label, question: '이 기간 전체의 흐름과 핵심 에너지는 무엇인가' }],
+  });
+  const flow = (unit: '일' | '주' | '월', names: string[]): ReadingPlan => ({
+    type: 'FLOW', cardCount: names.length, timeUnit: unit,
+    positions: names.map(n => ({ name: n, question: `${n}의 흐름` })),
+  });
+  switch (kind) {
+    case 'day':
+      if (choice === '1') return single('오늘 하루');
+      if (choice === '2') return flow('일', ['오전', '오후', '저녁']);
+      return null;
+    case 'week':
+      if (choice === '1') return single('이번 주');
+      if (choice === '2') return flow('일', ['초반', '중반', '주말']);
+      return null;
+    case 'month':
+      if (choice === '1') return single('이번 달');
+      if (choice === '2') return flow('주', ['1주차', '2주차', '3주차', '4주차']);
+      return null;
+    case 'year':
+      if (choice === '1') return single('올해');
+      if (choice === '2') return flow('월', ['1분기', '2분기', '3분기', '4분기']);
+      if (choice === '3') return flow('월', ['1월','2월','3월','4월','5월','6월','7월','8월','9월','10월','11월','12월']);
+      return null;
+    default:
+      return null;
+  }
+}
+
+// 기간 분할 선택지 출력
+function periodSplitPrompt(kind: PeriodKind): string[] {
+  switch (kind) {
+    case 'day':   return ['오늘 하루를 어떻게 볼까.', '[1] 하루 전체 — 1장', '[2] 오전·오후·저녁 — 3장'];
+    case 'week':  return ['이번 주를 어떻게 볼까.', '[1] 한 주 전체 — 1장', '[2] 초반·중반·주말 — 3장'];
+    case 'month': return ['이번 달을 어떻게 볼까.', '[1] 한 달 전체 — 1장', '[2] 주차별 — 4장'];
+    case 'year':  return ['올해를 어떻게 볼까.', '[1] 올해 전체 — 1장', '[2] 분기별 — 4장', '[3] 월별 — 12장'];
+  }
+}
+
 // ─────────────────────────────────────────────────────────
 // Component
 // ─────────────────────────────────────────────────────────
@@ -181,6 +237,7 @@ export default function Terminal() {
   const [replayIndex, setReplayIndex] = useState<number | null>(null); // 현재 재생 중인 기록의 인덱스 ([제거]/[추출] 대상)
   const replayLogIdsRef = useRef<string[]>([]); // 방금 재생한 기록 로그들의 id ([제거]/[추출] 시 회색·취소선 처리 대상)
   const [questionDraft, setQuestionDraft] = useState<string[]>([]); // 카톡식 멀티라인 질문 작성 버퍼 ([입력 완료] 전까지 누적)
+  const [periodKind, setPeriodKind] = useState<PeriodKind | null>(null); // 단일 기간 분할 선택 대기 중인 기간 종류
   const [pendingNav, setPendingNav] = useState<'Q' | 'B' | null>(null); // 스프레드 중 QTB 이동 확인 대기
   const [navReturnStep, setNavReturnStep] = useState<FlowStep>('ask_question'); // 이동 취소 시 복귀 단계
   const currentOptions = step === 'login' ? LOGIN_OPTIONS
@@ -802,6 +859,18 @@ export default function Terminal() {
           addLog("[N] 취소", "system");
           setStep('confirm_plan');
         } else if (plan.type === 'FLOW') {
+          // 단일 기간(오늘/이번 주/이번 달/올해) → 1장 전체로 볼지, 나눠서 볼지 먼저 묻는다.
+          const kind = detectSinglePeriod(context.join(' '));
+          if (kind) {
+            setPeriodKind(kind);
+            addLog("■ [PERIOD_MODE] :: 기간 리딩", "system");
+            await runDelay(200);
+            for (const line of periodSplitPrompt(kind)) addLog(line, "system");
+            addLog("[N] 취소", "system");
+            setStep('confirm_period_split');
+            setIsProcessing(false);
+            return;
+          }
           // FLOW: 포지션 목록 대신 카드 수 + 시간단위 설정 화면으로 이동
           const unit = plan.timeUnit ?? '주';
           const n = plan.cardCount;
@@ -1246,7 +1315,7 @@ export default function Terminal() {
     addLog("- - - - - - - - - - - - - - - -", "separator");
     addLog("무엇을 알고 싶은가.", "system");
     addLog("마녀의 카드는 들을 준비가 되었다.", "system");
-    addLog("한 줄씩 나눠 말해도 된다. 다 말했으면 [입력 완료].", "system");
+    addLog("끊어 말해도 좋다. 다 게워냈거든 [입력 완료].", "system");
     setStep('ask_question');
     setIsProcessing(false);
   };
@@ -1972,6 +2041,30 @@ export default function Terminal() {
       return;
     }
 
+    // confirm_period_split — 단일 기간을 1장 전체로 볼지 / 나눠서 볼지 선택
+    if (step === 'confirm_period_split') {
+      addLog(input, 'user');
+      if (isNo(input)) {
+        addLog("■ 취소. 질문을 다시 입력하라.", "system");
+        setPeriodKind(null);
+        setReadingPlan(null);
+        setQuestionContext([]);
+        setQuestionAttempts(0);
+        setStep('ask_question');
+        return;
+      }
+      if (!periodKind) { setStep('ask_question'); return; }
+      const plan = buildPeriodPlan(periodKind, input.trim());
+      if (!plan) {
+        addLog("■ 제시된 번호 중 하나를 선택하라.", "system");
+        return;
+      }
+      setReadingPlan(plan);
+      setPeriodKind(null);
+      await processPlanConfirmation(plan);
+      return;
+    }
+
     // confirm_flow_config — 자연어로 카드 수 + 시간단위 설정
     if (step === 'confirm_flow_config') {
       addLog(input, 'user');
@@ -2172,7 +2265,7 @@ export default function Terminal() {
         addLog("무엇을 알고 싶은가.", "system");
         await runDelay(400);
         addLog("마녀의 카드는 들을 준비가 되었다.", "system");
-        addLog("한 줄씩 나눠 말해도 된다. 다 말했으면 [입력 완료].", "system");
+        addLog("끊어 말해도 좋다. 다 게워냈거든 [입력 완료].", "system");
         addLog("(/menu 입력 시 언제든 메인으로 돌아갈 수 있다.)", "system");
         setQuestionContext([]);
         setStep('ask_question');
@@ -2324,12 +2417,8 @@ export default function Terminal() {
 
       if (!isComposeDone) {
         // 한 줄 누적 (카톡 메시지처럼 화면에 쌓인다)
-        const isFirstLine = questionDraft.length === 0;
         addLog(input, 'user');
         setQuestionDraft(prev => [...prev, input]);
-        if (isFirstLine) {
-          addLog("■ 한 줄씩 이어 말해도 된다. 다 말했으면 [입력 완료].", "system");
-        }
         return;
       }
 

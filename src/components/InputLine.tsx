@@ -13,7 +13,7 @@ type InputLineProps = {
 
 export default function InputLine({ onSubmit, onArrowKey, disabled, allowEmpty, focusKey, wantKeyboard = true }: InputLineProps) {
   const ref = useRef<HTMLTextAreaElement>(null);
-  const lastSubmitRef = useRef(0); // 중복 제출(keydown+keyup 동시 발생) 방지
+  const enterHandledRef = useRef(false); // 같은 Enter가 keydown·keyup 양쪽에서 제출되는 중복 방지
 
   useEffect(() => {
     if (disabled) return;
@@ -39,10 +39,6 @@ export default function InputLine({ onSubmit, onArrowKey, disabled, allowEmpty, 
   const submitValue = () => {
     const val = ref.current?.value.trim() || '';
     if (!val && !allowEmpty) return;
-    // keydown과 keyup이 같은 Enter에 대해 둘 다 제출하는 것을 차단 (모바일/IME 환경 대응)
-    const now = Date.now();
-    if (now - lastSubmitRef.current < 120) return;
-    lastSubmitRef.current = now;
     if (ref.current) {
       ref.current.value = '';
       ref.current.style.height = 'auto';
@@ -57,22 +53,21 @@ export default function InputLine({ onSubmit, onArrowKey, disabled, allowEmpty, 
       return;
     }
     if (e.key === 'Enter' && !e.shiftKey) {
-      // 한글 IME 조합 중이면 무시
+      // 한글 IME 조합 중이면 무시 (keyup에서 처리)
       if (e.nativeEvent.isComposing) return;
       e.preventDefault();
+      enterHandledRef.current = true; // 이 Enter는 keydown에서 처리됨 → keyup은 건너뛴다
       submitValue();
     }
   };
 
   const handleKeyUp = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    // 모바일 키보드에서 Enter가 keydown 대신 keyup으로만 오는 경우 처리
+    // 모바일/IME 환경에서 Enter가 keyup으로만 오는 경우의 폴백.
     if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+      if (enterHandledRef.current) { enterHandledRef.current = false; return; } // keydown이 이미 처리
       const el = ref.current;
       if (el && el.value.trim() === '' && !allowEmpty) return;
-      // 이미 keydown에서 처리된 경우 중복 방지 (value가 비어있으면 이미 제출됨)
-      if (el && el.value !== '') {
-        submitValue();
-      }
+      submitValue();
     }
   };
 
