@@ -86,6 +86,32 @@ function parseClickable(text: string): Segment[] {
       continue;
     }
 
+    // [기록] / [질문 내역] / [목록으로 돌아가기] — 기록 목록으로
+    const recordM = rest.match(/^\[기록\]/);
+    if (recordM) {
+      segments.push({ text: recordM[0], clickValue: '/history' });
+      i += recordM[0].length;
+      continue;
+    }
+    const backListM = rest.match(/^\[목록으로 돌아가기\]/);
+    if (backListM) {
+      segments.push({ text: backListM[0], clickValue: '/history' });
+      i += backListM[0].length;
+      continue;
+    }
+    // [제거] / [추출] — 재생 후 기록 조작
+    const removeM = rest.match(/^\[제거\]/);
+    if (removeM) {
+      segments.push({ text: removeM[0], clickValue: '/remove' });
+      i += removeM[0].length;
+      continue;
+    }
+    const extractM = rest.match(/^\[추출\]/);
+    if (extractM) {
+      segments.push({ text: extractM[0], clickValue: '/extract' });
+      i += extractM[0].length;
+      continue;
+    }
     // [질문 내역] / [결제 내역] — 가방 하위 메뉴
     const historyM = rest.match(/^\[질문 내역\]/);
     if (historyM) {

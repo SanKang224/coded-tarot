@@ -8,15 +8,21 @@ type InputLineProps = {
   disabled?: boolean;
   allowEmpty?: boolean; // 빈 엔터 허용 (confirm 스텝에서 Y로 처리)
   focusKey?: string | number; // 값이 바뀌면 입력창을 다시 포커스 (버튼 클릭으로 포커스 뺏긴 경우 복구)
+  wantKeyboard?: boolean; // 모바일에서 키보드를 자동으로 띄울지 (텍스트 입력 스텝에서만 true)
 };
 
-export default function InputLine({ onSubmit, onArrowKey, disabled, allowEmpty, focusKey }: InputLineProps) {
+export default function InputLine({ onSubmit, onArrowKey, disabled, allowEmpty, focusKey, wantKeyboard = true }: InputLineProps) {
   const ref = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
+    if (disabled) return;
+    const isTouch = typeof window !== 'undefined' && (('ontouchstart' in window) || navigator.maxTouchPoints > 0);
+    // 모바일은 텍스트 입력 스텝(wantKeyboard)에서만 키보드를 띄운다.
+    // 버튼/메뉴 스텝이면 포커스를 풀어 키보드를 내린다. (입력창을 직접 탭하면 언제든 입력 가능)
+    if (isTouch && !wantKeyboard) { ref.current?.blur(); return; }
     // preventScroll: 재포커스 시 브라우저가 입력창을 보이려고 화면을 스크롤(위로 밀림)하는 것을 막는다.
-    if (!disabled) ref.current?.focus({ preventScroll: true });
-  }, [disabled, focusKey]);
+    ref.current?.focus({ preventScroll: true });
+  }, [disabled, focusKey, wantKeyboard]);
 
   // textarea 높이 자동 조절 (최대 4줄)
   const autoResize = () => {
@@ -96,7 +102,6 @@ export default function InputLine({ onSubmit, onArrowKey, disabled, allowEmpty, 
             lineHeight: '24px',
           }}
           className="outline-none border-none ring-0 focus:ring-0 w-full font-mono text-[16px] caret-[#00FF41] hide-scrollbar"
-          autoFocus
         />
         {!disabled && (
           <span

@@ -56,6 +56,8 @@ export async function GET() {
       const first = rows[0];
       const last = rows[rows.length - 1];
       return {
+        id: first.id,                       // 솔로(세션 없는) 기록 삭제용
+        session_id: first.session_id,       // 스프레드 전체 삭제용
         created_at: first.created_at,       // 스프레드 시작 시각
         lastAt: last.created_at,            // 정렬용 (최근 활동)
         question_text: first.question_text, // 최초질문
@@ -84,4 +86,33 @@ export async function GET() {
     readingSessions,
     payments: payments ?? [],
   });
+}
+
+// 기록(스프레드) 삭제 — [제거] 버튼.
+// session_id가 있으면 그 스프레드의 모든 행을, 없으면 solo 행(id)을 삭제한다.
+export async function DELETE(req: Request) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) {
+    return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
+  }
+
+  let body: { sessionId?: string | null; id?: string } = {};
+  try { body = await req.json(); } catch { /* 빈 본문 */ }
+
+  const query = supabase.from('readings').delete().eq('user_id', user.id);
+  if (body.sessionId) {
+    query.eq('session_id', body.sessionId);
+  } else if (body.id) {
+    query.eq('id', body.id);
+  } else {
+    return NextResponse.json({ error: 'BAD_REQUEST' }, { status: 400 });
+  }
+
+  const { error } = await query;
+  if (error) {
+    return NextResponse.json({ error: 'DELETE_FAILED' }, { status: 500 });
+  }
+  return NextResponse.json({ ok: true });
 }

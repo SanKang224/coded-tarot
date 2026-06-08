@@ -37,6 +37,10 @@ type FlowStep =
   | 'token_shop' | 'token_shop_confirm'
   | 'bag' | 'bag_history' | 'confirm_end_session' | 'confirm_nav';
 
+// 모바일에서 키보드를 자동으로 띄울 스텝 — 자유 텍스트 입력이 주 동작인 경우만.
+// 그 외(버튼/메뉴 스텝)에서는 키보드를 띄우지 않는다. (입력창을 직접 탭하면 언제든 입력 가능)
+const KEYBOARD_STEPS: FlowStep[] = ['login_email', 'login_email_pw', 'ask_question', 'ask_flow_period'];
+
 const TOKEN_PACKAGES = [
   { id: 1, tokens: 3,  price: '990원' },
   { id: 2, tokens: 15, price: '4,450원' },
@@ -172,8 +176,9 @@ export default function Terminal() {
   const [choiceTexts, setChoiceTexts] = useState<{ opt1: string; opt2: string } | null>(null); // CHOICE 예시 텍스트 저장
   const [userId, setUserId] = useState<string>(''); // Supabase user.id (TossPaymentModal customerKey용)
   const [paymentPackageId, setPaymentPackageId] = useState<number | null>(null); // 열린 토스 결제 모달의 패키지 ID
-  const [bagReadings, setBagReadings] = useState<Array<{ created_at: string; question_text: string; reading_type: string; count: number; reading_content: string }>>([]); // 가방 질문 내역(세션 그룹) 캐시 — 재생용
+  const [bagReadings, setBagReadings] = useState<Array<{ id: string; session_id: string | null; created_at: string; question_text: string; reading_type: string; count: number; reading_content: string }>>([]); // 가방 기록(세션 그룹) 캐시 — 재생용
   const [bagPayments, setBagPayments] = useState<Array<{ created_at: string; amount: number; tokens_added: number; package_name: string }>>([]); // 가방 결제 내역 캐시
+  const [replayIndex, setReplayIndex] = useState<number | null>(null); // 현재 재생 중인 기록의 인덱스 ([제거]/[추출] 대상)
   const [pendingNav, setPendingNav] = useState<'Q' | 'B' | null>(null); // 스프레드 중 QTB 이동 확인 대기
   const [navReturnStep, setNavReturnStep] = useState<FlowStep>('ask_question'); // 이동 취소 시 복귀 단계
   const currentOptions = step === 'login' ? LOGIN_OPTIONS
@@ -667,7 +672,7 @@ export default function Terminal() {
         setPendingReshuffleCtx({ context, ownerFlag: isOwner });
         addLog("■ 지금의 이야기는 여기서 닫힌다.", "system");
         addLog("새로운 주제를 위해 덱을 다시 섞어야 한다.", "system");
-        addLog("이대로 진행하겠는가?  Y: 계속   N: 현재 이야기 유지", "system");
+        addLog("이대로 진행하겠는가?  [Y] 계속   [N] 유지", "system");
         setStep('confirm_new_topic');
         setIsProcessing(false);
         return;
@@ -735,7 +740,7 @@ export default function Terminal() {
         setPendingReshuffleCtx({ context, ownerFlag });
         addLog("■ 지금의 이야기는 여기서 닫힌다.", "system");
         addLog("새로운 주제를 위해 덱을 다시 섞어야 한다.", "system");
-        addLog("이대로 진행하겠는가?  Y: 계속   N: 현재 이야기 유지", "system");
+        addLog("이대로 진행하겠는가?  [Y] 계속   [N] 유지", "system");
         setStep('confirm_new_topic');
         setIsProcessing(false);
         return;
@@ -769,7 +774,7 @@ export default function Terminal() {
           renderReadingPlan(plan);
           await runDelay(400);
           addLog("이대로 진행하려면 [엔터] 또는 Y", "system");
-          addLog("취소: N", "system");
+          addLog("[N] 취소", "system");
           setStep('confirm_plan');
         } else if (plan.type === 'FLOW') {
           // FLOW: 포지션 목록 대신 카드 수 + 시간단위 설정 화면으로 이동
@@ -785,7 +790,7 @@ export default function Terminal() {
           addLog("  4장/일 → 1일차~4일차", "system");
           addLog("", "system", false);
           addLog("설정 입력 (예: 6개월, 4주, 30일, 3개월치)", "system");
-          addLog("[엔터]: 기본 설정으로 진행 | N: 취소", "system");
+          addLog("[엔터] 기본 진행 | [N] 취소", "system");
           setStep('confirm_flow_config');
         } else {
           // QUESTION: 기존 플랜 확인 흐름
@@ -793,7 +798,7 @@ export default function Terminal() {
           await runDelay(400);
           addLog("이대로 진행하려면 [엔터] 또는 Y", "system");
           addLog("카드 수 변경: 숫자 입력 (1~6)", "system");
-          addLog("취소: N", "system");
+          addLog("[N] 취소", "system");
           setStep('confirm_plan');
         }
       } else if (aiText.trimStart().startsWith('CHOICE')) {
@@ -1256,7 +1261,7 @@ export default function Terminal() {
       addLog(`  [${pkg.id}] ${pkg.label}`, "system");
     });
     addLog("", "system", false);
-    addLog("번호를 입력하라.  N: 취소", "system");
+    addLog("번호를 입력하라.  [N] 취소", "system");
     addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
     setStep('token_shop');
   };
@@ -1332,6 +1337,8 @@ export default function Terminal() {
         const data = await res.json();
 
         const readingSessions: Array<{
+          id: string;
+          session_id: string | null;
           created_at: string;
           question_text: string;
           reading_type: string;
@@ -1360,7 +1367,7 @@ export default function Terminal() {
         addLog("", "system", false);
 
         // ── 조회 메뉴 ───────────────────────────────
-        addLog(`[질문 내역]  스프레드 ${readingSessions.length}건`, "system");
+        addLog(`[기록]  스프레드 ${readingSessions.length}건`, "system");
         addLog(`[결제 내역]  결제 ${payments.length}건`, "system");
       }
     } catch {
@@ -1375,7 +1382,7 @@ export default function Terminal() {
   const showQuestionHistory = async () => {
     extinguishWitchLogs(); // 직전 재생 독백을 회색으로 꺼뜨림
     addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
-    addLog("[ 질문 내역 ]", "system");
+    addLog("[ 기록 ]", "system");
     if (bagReadings.length === 0) {
       addLog("  기록 없음.", "system");
       addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
@@ -1413,6 +1420,7 @@ export default function Terminal() {
       addLog("■ 해당 기록을 찾을 수 없다. 가방을 다시 열어라.", "system");
       return;
     }
+    setReplayIndex(n - 1); // [제거]/[추출] 대상 기록
     setIsProcessing(true);
     addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
     addLog(`▶ 기록 재생 :: [${String(n).padStart(2,'0')}]  ${fmtDate(r.created_at)}`, "system");
@@ -1432,7 +1440,7 @@ export default function Terminal() {
 
     await runDelay(500);
     addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
-    addLog("재생이 끝났다.   [질문 내역]   [메뉴]", "system");
+    addLog("재생이 끝났다.   [제거]   [추출]   [목록으로 돌아가기]", "system");
     setStep('main');
     setIsProcessing(false);
   };
@@ -1489,6 +1497,64 @@ export default function Terminal() {
     // /payments — 결제 내역 조회 ([결제 내역] 버튼)
     if (input.trim().toLowerCase() === '/payments') {
       await showPaymentHistory();
+      return;
+    }
+
+    // /extract — 방금 재생한 기록을 클립보드로 추출 ([추출] 버튼)
+    if (input.trim().toLowerCase() === '/extract') {
+      const target = replayIndex !== null ? bagReadings[replayIndex] : undefined;
+      if (!target) {
+        addLog("■ 추출할 기록이 없다.", "system");
+        return;
+      }
+      try {
+        await navigator.clipboard.writeText(target.reading_content);
+        addLog("✦ 기록을 클립보드에 추출했다.", "system");
+      } catch {
+        addLog("■ 클립보드 접근 실패. 브라우저 권한을 확인하라.", "system");
+      }
+      return;
+    }
+
+    // /remove — 방금 재생한 기록을 제거 ([제거] 버튼)
+    if (input.trim().toLowerCase() === '/remove') {
+      const target = replayIndex !== null ? bagReadings[replayIndex] : undefined;
+      if (!target) {
+        addLog("■ 제거할 기록이 없다.", "system");
+        return;
+      }
+      setIsProcessing(true);
+      try {
+        const res = await fetch('/api/bag', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sessionId: target.session_id, id: target.id }),
+        });
+        if (res.ok) {
+          const updated = bagReadings.filter((_, i) => i !== replayIndex);
+          setBagReadings(updated);
+          setReplayIndex(null);
+          addLog("✦ 기록을 제거했다.", "system");
+          await runDelay(300);
+          // 목록으로 복귀
+          addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
+          addLog("[ 기록 ]", "system");
+          if (updated.length === 0) {
+            addLog("  기록 없음.", "system");
+            addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
+            showMenuPrompt();
+          } else {
+            addLog("  방향키·엔터 또는 줄을 눌러 선택하면 그 기록이 다시 흐른다.", "system");
+            setMenuIndex(0);
+            setStep('bag_history');
+          }
+        } else {
+          addLog("■ 제거 실패. 잠시 후 다시 시도하라.", "system");
+        }
+      } catch {
+        addLog("■ 제거 회선 불안정.", "system");
+      }
+      setIsProcessing(false);
       return;
     }
 
@@ -1708,7 +1774,7 @@ export default function Terminal() {
         return;
       }
       setPendingEmail(input.trim());
-      addLog("신규 가입: N   로그인: Y", "system");
+      addLog("[Y] 로그인   [N] 신규가입", "system");
       setStep('login_email_type');
       return;
     }
@@ -1726,7 +1792,7 @@ export default function Terminal() {
         addLog("비밀번호를 설정하라. (8자 이상)", "system");
         setStep('login_email_pw');
       } else {
-        addLog("■ Y: 로그인   N: 신규 가입", "system");
+        addLog("■ [Y] 로그인   [N] 신규가입", "system");
       }
       return;
     }
@@ -1967,7 +2033,7 @@ export default function Terminal() {
         await showTokenShop();
         return;
       }
-      addLog("■ [엔터]/Y: 확정   N: 취소", "system");
+      addLog("■ [엔터]/Y 확정   [N] 취소", "system");
       return;
     }
 
@@ -2018,7 +2084,7 @@ export default function Terminal() {
         return;
       }
 
-      addLog("■ [엔터]/Y: 확정 | N: 취소 | 숫자: 카드수 변경" + (readingPlan.type === 'FLOW' ? " | 일/주/월: 시간단위 변경" : ""), "system");
+      addLog("■ [엔터]/Y 확정 | [N] 취소 | 숫자: 카드수 변경" + (readingPlan.type === 'FLOW' ? " | 일/주/월: 시간단위 변경" : ""), "system");
       return;
     }
 
@@ -2432,6 +2498,7 @@ export default function Terminal() {
       {/* 아래에 가려진 내용이 있을 때 — 클릭하면 맨 아래로 */}
       {showScrollHint && (
         <button
+          onMouseDown={(e) => e.preventDefault()}
           onClick={scrollToBottom}
           aria-label="맨 아래로"
           className="absolute left-1/2 -translate-x-1/2 z-20 cursor-pointer animate-pulse"
@@ -2459,6 +2526,7 @@ export default function Terminal() {
             onArrowKey={handleArrowKey}
             disabled={isProcessing}
             focusKey={`${step}-${logs.length}`}
+            wantKeyboard={KEYBOARD_STEPS.includes(step)}
             allowEmpty={(['confirm_plan', 'confirm_flow_config', 'confirm_context', 'confirm_identity', 'ask_flow_period', 'confirm_new_topic', 'token_shop_confirm', 'login', 'confirm_end_session', 'bag_history'] as FlowStep[]).includes(step)}
           />
         </div>
