@@ -315,6 +315,7 @@ function LogItem({
         'clickValue' in seg ? (
           <button
             key={i}
+            // 탭 시 입력창 포커스를 뺏지 않게 한다 → 키보드가 닫혔다 열리는 깜빡임·화면 밀림 방지.
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => onTap(seg.clickValue!)}
             style={{

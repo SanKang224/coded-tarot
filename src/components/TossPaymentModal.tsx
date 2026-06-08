@@ -150,7 +150,12 @@ export default function TossPaymentModal({ packageId, userId, onClose }: Props) 
         }}
       />
       <div style={{
-        position: 'fixed', inset: 0, zIndex: 9999,
+        position: 'fixed',
+        top: 'var(--app-top, 0px)',
+        left: 0,
+        right: 0,
+        height: 'var(--app-h, 100dvh)',
+        zIndex: 9999,
         background: 'rgba(0,0,0,0.96)',
         display: 'flex', alignItems: 'center', justifyContent: 'center',
         fontFamily: FONT,
@@ -158,15 +163,16 @@ export default function TossPaymentModal({ packageId, userId, onClose }: Props) 
       }}>
         <div style={{
           width: '100%', maxWidth: '420px',
+          maxHeight: '100%',
           border: '1px solid #00FF41',
           background: '#000',
-          maxHeight: '90dvh',
-          overflowY: 'auto',
           display: 'flex',
           flexDirection: 'column',
+          overflow: 'hidden',
         }}>
-          {/* 헤더 */}
+          {/* 헤더 (고정) */}
           <div style={{
+            flexShrink: 0,
             borderBottom: '1px solid rgba(0,255,65,0.25)',
             padding: '14px 20px',
             color: 'rgba(0,255,65,0.5)',
@@ -184,16 +190,16 @@ export default function TossPaymentModal({ packageId, userId, onClose }: Props) 
             </button>
           </div>
 
-          {/* 패키지 정보 */}
-          <div style={{ padding: '16px 20px 12px', borderBottom: '1px solid rgba(0,255,65,0.15)' }}>
+          {/* 패키지 정보 (고정) */}
+          <div style={{ flexShrink: 0, padding: '16px 20px 12px', borderBottom: '1px solid rgba(0,255,65,0.15)' }}>
             <div style={{ color: '#00FF41', fontSize: '16px' }}>{pkg.label}</div>
             <div style={{ color: 'rgba(0,255,65,0.4)', fontSize: '11px', marginTop: '4px' }}>
               결제 즉시 지급된다.
             </div>
           </div>
 
-          {/* 토스 위젯 영역 */}
-          <div style={{ padding: '0 12px' }}>
+          {/* 토스 위젯 영역 (스크롤) — 결제 버튼은 아래에 항상 고정 */}
+          <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '0 12px' }}>
             {loading && (
               <div style={{ color: 'rgba(0,255,65,0.5)', fontSize: '12px', padding: '20px', textAlign: 'center' }}>
                 결제 모듈 로드 중...
@@ -203,36 +209,36 @@ export default function TossPaymentModal({ packageId, userId, onClose }: Props) 
             <div id="toss-payment-agreement" />
           </div>
 
-          {/* 에러 메시지 */}
-          {error && (
-            <div style={{ color: '#FF3300', fontSize: '12px', padding: '0 20px 8px', fontFamily: FONT }}>
-              ■ {error}
-            </div>
-          )}
-
-          {/* 결제 버튼 */}
-          {widgetReady && (
-            <div style={{ padding: '12px 20px 20px' }}>
-              <button
-                onClick={handlePay}
-                disabled={paying}
-                style={{
-                  width: '100%',
-                  background: paying ? 'rgba(0,255,65,0.4)' : '#00FF41',
-                  color: '#000',
-                  border: 'none',
-                  padding: '13px',
-                  fontFamily: FONT,
-                  fontSize: '15px',
-                  fontWeight: 'bold',
-                  cursor: paying ? 'default' : 'pointer',
-                  letterSpacing: '0.04em',
-                }}
-              >
-                {paying ? '결제 진행 중...' : `${pkg.tokens}토큰 결제하기`}
-              </button>
-            </div>
-          )}
+          {/* 푸터 (하단 고정): 에러 + 결제 버튼 — 스크롤과 무관하게 항상 보인다 */}
+          <div style={{ flexShrink: 0, borderTop: '1px solid rgba(0,255,65,0.2)' }}>
+            {error && (
+              <div style={{ color: '#FF3300', fontSize: '12px', padding: '8px 20px 0', fontFamily: FONT }}>
+                ■ {error}
+              </div>
+            )}
+            {widgetReady && (
+              <div style={{ padding: '12px 20px 20px' }}>
+                <button
+                  onClick={handlePay}
+                  disabled={paying}
+                  style={{
+                    width: '100%',
+                    background: paying ? 'rgba(0,255,65,0.4)' : '#00FF41',
+                    color: '#000',
+                    border: 'none',
+                    padding: '13px',
+                    fontFamily: FONT,
+                    fontSize: '15px',
+                    fontWeight: 'bold',
+                    cursor: paying ? 'default' : 'pointer',
+                    letterSpacing: '0.04em',
+                  }}
+                >
+                  {paying ? '결제 진행 중...' : `${pkg.tokens}토큰 결제하기`}
+                </button>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </>

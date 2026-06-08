@@ -2,6 +2,9 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Tailwind v4에서 구버전 @tailwind 지시문은 preflight(box-sizing 리셋)를 주입하지 않는다.
+   border-box가 없으면 padding/border가 width 바깥에 더해져 터미널 박스가 화면을 넘쳐
+   오른쪽이 잘린다. Tailwind가 원래 가정하는 border-box를 명시적으로 복원. */
 *, ::before, ::after { box-sizing: border-box; }
 
 html {
@@ -14,11 +17,13 @@ html, body {
 }
 
 body {
-background-color: #000000;
-color: #00FF41;
-font-family: var(--font-roboto-mono), var(--font-noto-sans-kr), 'Courier New', monospace;
-overflow-wrap: break-word;
-overflow-wrap: anywhere;
+  background-color: #000000;
+  color: #00FF41;
+  font-family: var(--font-roboto-mono), var(--font-noto-sans-kr), 'Courier New', monospace;
+  /* 긴 장식선(━━━/▓▓▓)이 flex 안에서 안 줄어들어 터미널 오른쪽이 잘리는 문제 방지.
+     anywhere는 break-word와 달리 min-content 폭을 줄여 가로 넘침 자체를 없앤다. (상속됨) */
+  overflow-wrap: break-word;
+  overflow-wrap: anywhere;
 }
 
 * {

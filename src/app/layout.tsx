@@ -41,8 +41,14 @@ export default function RootLayout({
           height는 실제 보이는 높이(--app-h: visualViewport)로 잡아 키보드 열림/닫힘에 대응.
           safe-area 패딩으로 상태바/노치/홈인디케이터에 가리지 않게 한다. */}
       <body
-        className={`${robotoMono.variable} ${notoSansKr.variable} font-kr bg-black w-full flex flex-col items-center overflow-hidden`}
+        className={`${robotoMono.variable} ${notoSansKr.variable} font-kr bg-black flex flex-col items-center overflow-hidden`}
         style={{
+          // 문서를 visualViewport 영역에 고정 — 키보드가 열려도 터미널이 위로 밀리지 않는다.
+          // top은 인앱 브라우저가 문서를 밀어올렸을 때의 offset(--app-top)을 따라가 항상 보이는 영역에 맞춘다.
+          position: 'fixed',
+          top: 'var(--app-top, 0px)',
+          left: 0,
+          right: 0,
           height: 'var(--app-h, 100svh)',
           // 상태바/노치 높이는 폰마다 달라 safe-area로 맞추되, 0으로 오는 환경 대비 최소 여백 확보
           paddingTop: 'max(env(safe-area-inset-top), 8px)',
@@ -52,7 +58,7 @@ export default function RootLayout({
         }}
       >
         <ViewportHeight />
-        <main className="flex-1 min-h-0 w-full overflow-hidden px-3 py-2">
+        <main className="flex-1 min-h-0 w-full overflow-hidden px-4 py-2">
           {children}
         </main>
         <Footer />
