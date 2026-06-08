@@ -1398,7 +1398,8 @@ export default function Terminal() {
       addLog("■ 기록 회선 불안정.", "system");
     }
     addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
-    // 가방 화면에는 QTB 프롬프트를 띄우지 않는다. [기록]/[결제 내역] 버튼으로 이동, /menu로 메인 복귀.
+    // 가방 화면에는 QTB 프롬프트를 띄우지 않는다. [돌아가기]로 메인(QTB) 복귀.
+    addLog("[돌아가기]", "system");
     extinguishWitchLogs();
     setIdentityConfirmed(false);
     setStep('main');
@@ -2545,13 +2546,15 @@ export default function Terminal() {
             bottom: '64px',
             fontFamily: 'var(--font-roboto-mono), var(--font-noto-sans-kr), "Courier New", monospace',
             fontSize: '12px',
-            color: '#000',
-            background: '#00FF41',
-            border: 'none',
-            borderRadius: '14px',
+            color: '#00FF41',                 // 네온 그린 텍스트
+            background: '#000',               // 블랙 박스
+            border: '1px solid #00FF41',      // 네온 그린 테두리
+            borderRadius: 0,                  // 네모
             padding: '5px 14px',
             fontWeight: 'bold',
-            boxShadow: '0 0 12px rgba(0,255,65,0.6)',
+            letterSpacing: '0.08em',
+            boxShadow: '0 0 8px rgba(0,255,65,0.75), 0 0 18px rgba(0,255,65,0.4)', // 발광
+            textShadow: '0 0 6px rgba(0,255,65,0.9)',                              // 텍스트 네온
           }}
         >
           ▼ 더 있음

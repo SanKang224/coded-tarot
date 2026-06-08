@@ -131,6 +131,13 @@ function parseClickable(text: string): Segment[] {
       i += menuM[0].length;
       continue;
     }
+    // [돌아가기] — 가방 화면에서 메인(QTB)으로
+    const backMenuM = rest.match(/^\[돌아가기\]/);
+    if (backMenuM) {
+      segments.push({ text: backMenuM[0], clickValue: '__MENU__' });
+      i += backMenuM[0].length;
+      continue;
+    }
 
     const enterM = rest.match(/^\[엔터\](?:\/Y)?/);
     if (enterM) {
