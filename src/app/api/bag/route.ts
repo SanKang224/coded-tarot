@@ -32,17 +32,14 @@ export async function GET() {
     .single();
 
   // 리딩 기록 (세션 그룹화를 위해 넉넉히 가져온 뒤 묶는다)
-  const { data: readingRows } = await supabase
-    .from('readings')
-    .select('id, created_at, question_text, reading_type, reading_content, session_id')
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: true })
-    .limit(200);
+  // Vault+pgcrypto 복호화 RPC. DESC로 반환되므로 ASC 그룹화를 위해 reverse 한다.
+  const { data: readingRowsDesc } = await supabase.rpc('get_my_readings', { p_limit: 200 });
+  const readingRows = (readingRowsDesc ?? []).slice().reverse() as ReadingRow[];
 
   // session_id로 그룹화: 한 스프레드의 최초질문 + 꼬리질문을 하나로 묶는다.
   // session_id가 없는 옛 기록은 각 행을 단독 그룹으로 처리.
   const groups = new Map<string, ReadingRow[]>();
-  for (const r of (readingRows ?? []) as ReadingRow[]) {
+  for (const r of readingRows) {
     const key = r.session_id ?? `solo-${r.id}`;
     const arr = groups.get(key);
     if (arr) arr.push(r);

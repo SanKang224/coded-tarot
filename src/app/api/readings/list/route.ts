@@ -9,17 +9,14 @@ export async function GET() {
     return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
   }
 
-  const { data, error } = await supabase
-    .from('readings')
-    .select('id, created_at, question_text, reading_type, cards, reading_content, synthesis')
-    .eq('user_id', user.id)
-    .order('created_at', { ascending: false })
-    .limit(10);
+  // 본인 기록만 복호화하여 반환 (get_my_readings RPC, created_at DESC).
+  const { data, error } = await supabase.rpc('get_my_readings', { p_limit: 10 });
 
   if (error) {
     console.error('[/api/readings/list]', error);
     return NextResponse.json({ error: 'FETCH_FAILED' }, { status: 500 });
   }
 
+  // 기존 응답 shape 유지 (session_id는 RPC가 추가로 반환하지만 무해 — 제거하지 않는다)
   return NextResponse.json({ readings: data ?? [] });
 }

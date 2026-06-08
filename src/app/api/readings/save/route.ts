@@ -11,17 +11,16 @@ export async function POST(request: Request) {
 
   const { questionText, readingType, cards, readingContent, synthesis, sessionId } = await request.json();
 
-  const { error } = await supabase
-    .from('readings')
-    .insert({
-      user_id: user.id,
-      question_text: questionText,
-      reading_type: readingType,
-      cards: cards ?? [],
-      reading_content: readingContent ?? '',
-      synthesis: synthesis ?? null,
-      session_id: sessionId ?? null,
-    });
+  // 민감 컬럼은 Vault+pgcrypto로 암호화하여 저장한다 (insert_reading RPC).
+  // user_id는 RPC 내부에서 auth.uid()로 강제.
+  const { error } = await supabase.rpc('insert_reading', {
+    p_question_text: questionText,
+    p_reading_type: readingType,
+    p_cards: cards ?? [],
+    p_reading_content: readingContent ?? '',
+    p_synthesis: synthesis ?? null,
+    p_session_id: sessionId ?? null,
+  });
 
   if (error) {
     console.error('[/api/readings/save]', error);
