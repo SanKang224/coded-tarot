@@ -166,10 +166,10 @@ function buildPeriodPlan(kind: PeriodKind, choice: string): ReadingPlan | null {
 // 기간 분할 선택지 출력
 function periodSplitPrompt(kind: PeriodKind): string[] {
   switch (kind) {
-    case 'day':   return ['오늘 하루를 어떻게 볼까.', '[1] 하루 전체 — 1장', '[2] 오전·오후·저녁 — 3장'];
-    case 'week':  return ['이번 주를 어떻게 볼까.', '[1] 한 주 전체 — 1장', '[2] 초반·중반·주말 — 3장'];
-    case 'month': return ['이번 달을 어떻게 볼까.', '[1] 한 달 전체 — 1장', '[2] 주차별 — 4장'];
-    case 'year':  return ['올해를 어떻게 볼까.', '[1] 올해 전체 — 1장', '[2] 분기별 — 4장', '[3] 월별 — 12장'];
+    case 'day':   return ['오늘을 어떻게 읽을까.', '[1] 오늘의 운세 — 1장', '[2] 흐름: 오전·오후·저녁 — 3장'];
+    case 'week':  return ['이번 주를 어떻게 읽을까.', '[1] 이번 주 운세 — 1장', '[2] 흐름: 초반·중반·주말 — 3장'];
+    case 'month': return ['이번 달을 어떻게 읽을까.', '[1] 이번 달 운세 — 1장', '[2] 흐름: 주차별 — 4장'];
+    case 'year':  return ['올해를 어떻게 읽을까.', '[1] 올해의 운세 — 1장', '[2] 흐름: 분기별 — 4장', '[3] 흐름: 월별 — 12장'];
   }
 }
 
@@ -238,6 +238,7 @@ export default function Terminal() {
   const replayLogIdsRef = useRef<string[]>([]); // 방금 재생한 기록 로그들의 id ([제거]/[추출] 시 회색·취소선 처리 대상)
   const [questionDraft, setQuestionDraft] = useState<string[]>([]); // 카톡식 멀티라인 질문 작성 버퍼 ([입력 완료] 전까지 누적)
   const [periodKind, setPeriodKind] = useState<PeriodKind | null>(null); // 단일 기간 분할 선택 대기 중인 기간 종류
+  const lastSubmitRef = useRef<{ value: string; time: number }>({ value: '', time: 0 }); // 동일 입력 중복 제출 차단(경로 무관)
   const [pendingNav, setPendingNav] = useState<'Q' | 'B' | null>(null); // 스프레드 중 QTB 이동 확인 대기
   const [navReturnStep, setNavReturnStep] = useState<FlowStep>('ask_question'); // 이동 취소 시 복귀 단계
   const currentOptions = step === 'login' ? LOGIN_OPTIONS
@@ -1561,6 +1562,11 @@ export default function Terminal() {
 
   const handleUserInput = async (input: string) => {
     if (isProcessing || step === 'analyzing') return;
+    // 동일 입력이 250ms 내에 다시 들어오면 무시 — keydown/keyup 등 어떤 경로의 중복이든 차단.
+    // (사람은 같은 메시지를 250ms 안에 두 번 보낼 수 없으므로 정상 입력은 막지 않는다)
+    const _now = Date.now();
+    if (input === lastSubmitRef.current.value && _now - lastSubmitRef.current.time < 250) return;
+    lastSubmitRef.current = { value: input, time: _now };
     triggerSkipTyping();
 
     // /onboarding — 온보딩 재생 (개발/테스트용)
@@ -2432,6 +2438,24 @@ export default function Terminal() {
       const updated = [...questionContext, combined];
       setQuestionContext(updated);
       const isFollowUp = questionContext.length > 0;
+
+      // 단일 기간(오늘/이번 주/이번 달/올해)의 운세·흐름 질문 →
+      // AI 모호화 질문 없이 바로 [운세]/[흐름] 두 갈래를 제시한다.
+      if (!isFollowUp) {
+        const kind = detectSinglePeriod(combined);
+        if (kind && /운세|흐름|운이|기운|운\s|타로/.test(combined)) {
+          setPeriodKind(kind);
+          setIsOwner(true);
+          setIdentityConfirmed(true);
+          addLog("■ [PERIOD_MODE] :: 기간 리딩", "system");
+          await runDelay(200);
+          for (const line of periodSplitPrompt(kind)) addLog(line, "system");
+          addLog("[N] 취소", "system");
+          setStep('confirm_period_split');
+          return;
+        }
+      }
+
       if (isFollowUp || identityConfirmed) {
         // 꼬리질문 or 이미 확인됨 → 본인/타인 재확인 없이 바로 분석
         await processAnalysis(updated, isOwner);
