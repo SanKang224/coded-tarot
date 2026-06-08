@@ -287,7 +287,17 @@ export default function Terminal() {
       mo.disconnect();
       ro.disconnect();
     };
-  }, []);
+  }, [isLoaded]);
+
+  // 새 내용(로그/리딩/스텝/셔플)이 추가될 때마다 바닥으로 — 옵저버와 별개의 직접 트리거(이중 안전장치).
+  // 사용자가 위로 올려둔 상태(stick=false)면 따라가지 않는다.
+  useEffect(() => {
+    if (!stickToBottomRef.current) return;
+    const c = scrollContainerRef.current;
+    if (!c) return;
+    c.scrollTop = c.scrollHeight;                                  // 즉시
+    requestAnimationFrame(() => { c.scrollTop = c.scrollHeight; }); // 레이아웃 보정
+  }, [logs, cardReadings, step, isShuffling, isLoaded]);
 
   // 맨 아래로 강제 스크롤 (▼ 표시 클릭 시)
   const scrollToBottom = () => {
