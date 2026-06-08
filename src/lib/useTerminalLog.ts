@@ -6,6 +6,7 @@ export type LogType = {
   type: 'system' | 'user' | 'separator' | 'witch';
   isTyping?: boolean;
   dead?: boolean; // witch 독백 발광 종료 → 회색 죽은 글자 처리
+  struck?: boolean; // 제거된 기록 → 취소선
 };
 
 // sessionStorage: 탭/브라우저 닫으면 초기화 → 새 방문은 항상 fresh
@@ -56,12 +57,21 @@ export function useTerminalLog() {
   }, [logs, isLoaded]);
 
   const addLog = (text: string, type: LogType['type'], animate = true) => {
+    const id = crypto.randomUUID();
     setLogs(prev => [...prev, {
-      id: crypto.randomUUID(),
+      id,
       text,
       type,
       isTyping: (type === 'system' || type === 'witch') && animate
     }]);
+    return id;
+  };
+
+  // 특정 로그들에 패치 적용 (재생한 기록을 회색/취소선 처리할 때 사용)
+  const markLogs = (ids: string[], patch: Partial<LogType>) => {
+    if (ids.length === 0) return;
+    const idSet = new Set(ids);
+    setLogs(prev => prev.map(l => (idSet.has(l.id) ? { ...l, ...patch } : l)));
   };
 
   const clearLogs = () => {
@@ -74,5 +84,5 @@ export function useTerminalLog() {
     setLogs(prev => prev.map(l => (l.type === 'witch' ? { ...l, dead: true } : l)));
   };
 
-  return { logs, addLog, setLogs, clearLogs, extinguishWitchLogs, isLoaded };
+  return { logs, addLog, setLogs, clearLogs, extinguishWitchLogs, markLogs, isLoaded };
 }

@@ -122,7 +122,7 @@ function parseConfirmLines(text: string): string[] {
 // ─────────────────────────────────────────────────────────
 
 export default function Terminal() {
-  const { logs, addLog, clearLogs, extinguishWitchLogs, isLoaded } = useTerminalLog();
+  const { logs, addLog, clearLogs, extinguishWitchLogs, markLogs, isLoaded } = useTerminalLog();
   const [step, setStep] = useState<FlowStep>('boot');
   const [isProcessing, setIsProcessing] = useState(false);
   const [skipTyping, setSkipTyping] = useState(false);
@@ -179,6 +179,7 @@ export default function Terminal() {
   const [bagReadings, setBagReadings] = useState<Array<{ id: string; session_id: string | null; created_at: string; question_text: string; reading_type: string; count: number; reading_content: string }>>([]); // 가방 기록(세션 그룹) 캐시 — 재생용
   const [bagPayments, setBagPayments] = useState<Array<{ created_at: string; amount: number; tokens_added: number; package_name: string }>>([]); // 가방 결제 내역 캐시
   const [replayIndex, setReplayIndex] = useState<number | null>(null); // 현재 재생 중인 기록의 인덱스 ([제거]/[추출] 대상)
+  const replayLogIdsRef = useRef<string[]>([]); // 방금 재생한 기록 로그들의 id ([제거]/[추출] 시 회색·취소선 처리 대상)
   const [pendingNav, setPendingNav] = useState<'Q' | 'B' | null>(null); // 스프레드 중 QTB 이동 확인 대기
   const [navReturnStep, setNavReturnStep] = useState<FlowStep>('ask_question'); // 이동 취소 시 복귀 단계
   const currentOptions = step === 'login' ? LOGIN_OPTIONS
@@ -1374,7 +1375,10 @@ export default function Terminal() {
       addLog("■ 기록 회선 불안정.", "system");
     }
     addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
-    showMenuPrompt();
+    // 가방 화면에는 QTB 프롬프트를 띄우지 않는다. [기록]/[결제 내역] 버튼으로 이동, /menu로 메인 복귀.
+    extinguishWitchLogs();
+    setIdentityConfirmed(false);
+    setStep('main');
     setIsProcessing(false);
   };
 
@@ -1427,16 +1431,19 @@ export default function Terminal() {
     await runDelay(600);
 
     // 재생은 온보딩 독백처럼 글리치·네온(witch) 효과로 흐른다
+    // 재생한 witch 로그 id를 모아둔다 → [제거]/[추출] 시 그 줄들만 회색·취소선 처리
+    const replayIds: string[] = [];
     const lines = (r.reading_content || '').split('\n');
     for (const line of lines) {
       const clean = line.replace(/\s+$/, '');
       if (clean.trim() === '') {
         addLog('', 'system', false);
       } else {
-        addLog(clean, 'witch', true);
+        replayIds.push(addLog(clean, 'witch', true));
         await runDelay(160);
       }
     }
+    replayLogIdsRef.current = replayIds;
 
     await runDelay(500);
     addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
@@ -1509,6 +1516,7 @@ export default function Terminal() {
       }
       try {
         await navigator.clipboard.writeText(target.reading_content);
+        markLogs(replayLogIdsRef.current, { dead: true }); // 추출한 기록은 회색으로 (취소선 없음)
         addLog("✦ 기록을 클립보드에 추출했다.", "system");
       } catch {
         addLog("■ 클립보드 접근 실패. 브라우저 권한을 확인하라.", "system");
@@ -1531,6 +1539,7 @@ export default function Terminal() {
           body: JSON.stringify({ sessionId: target.session_id, id: target.id }),
         });
         if (res.ok) {
+          markLogs(replayLogIdsRef.current, { dead: true, struck: true }); // 제거한 기록은 회색+취소선으로 남긴다
           const updated = bagReadings.filter((_, i) => i !== replayIndex);
           setBagReadings(updated);
           setReplayIndex(null);
@@ -2488,6 +2497,13 @@ export default function Terminal() {
                 </div>
               );
             })}
+            <div
+              onClick={() => { triggerSkipTyping(); if (!isProcessing) openBag(); }}
+              className="cursor-pointer text-[#00FF41] mt-2"
+              style={{ fontWeight: 'bold', textDecoration: 'underline' }}
+            >
+              [가방으로 돌아가기]
+            </div>
           </div>
         )}
 
