@@ -119,6 +119,15 @@ function parseConfirmLines(text: string): string[] {
 
 type PeriodKind = 'day' | 'week' | 'month' | 'year';
 
+// 목적 없는 한탄/넋두리 — 질문으로 고도화 불가. 카드 대신 되묻는다.
+// 짧고(≤14자) 감정 토로/비질문 표현이면 true.
+function isVenting(text: string): boolean {
+  const t = text.trim();
+  if (!t) return true;
+  if (t.length > 14) return false;
+  return /몰라|모르겠|모름|아휴|에휴|한숨|짜증|아씨|아왜이래|그만|됐어|싫어|우울|답답|하아|아몰라|에라|망했|짜증나|모르겠다/.test(t);
+}
+
 // 단일 기간(오늘 하루/이번 주/이번 달/올해) 질문인지 판별.
 // "3개월" "6주" 처럼 숫자+단위가 명시되면 다중으로 보고 null(기존 흐름 유지).
 function detectSinglePeriod(text: string): PeriodKind | null {
@@ -2435,6 +2444,15 @@ export default function Terminal() {
       }
       const combined = questionDraft.join(' ');
       setQuestionDraft([]);
+
+      // 목적 없는 한탄/넋두리 → 질문 고도화 불가. 카드 대신 되묻는다. (컨텍스트에 담지 않음)
+      if (isVenting(combined)) {
+        addLog("■ 넋두리로는 카드가 깨어나지 않는다.", "system");
+        addLog("무엇이 알고 싶은가. 묻고 싶은 것을 말하라.", "system");
+        setStep('ask_question');
+        return;
+      }
+
       const updated = [...questionContext, combined];
       setQuestionContext(updated);
       const isFollowUp = questionContext.length > 0;
