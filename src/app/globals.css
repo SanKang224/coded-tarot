@@ -12,9 +12,12 @@ html, body {
 }
 
 body {
+  body {
   background-color: #000000;
   color: #00FF41;
   font-family: var(--font-roboto-mono), var(--font-noto-sans-kr), 'Courier New', monospace;
+  overflow-wrap: break-word;
+  overflow-wrap: anywhere;
 }
 
 * {

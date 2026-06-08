@@ -315,6 +315,7 @@ function LogItem({
         'clickValue' in seg ? (
           <button
             key={i}
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => onTap(seg.clickValue!)}
             style={{
               fontFamily: TERMINAL_FONT,

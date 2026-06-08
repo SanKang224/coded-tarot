@@ -14,7 +14,7 @@ export default function InputLine({ onSubmit, onArrowKey, disabled, allowEmpty, 
   const ref = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
-    if (!disabled) ref.current?.focus();
+        if (!disabled) ref.current?.focus({ preventScroll: true });
   }, [disabled, focusKey]);
 
   // textarea 높이 자동 조절 (최대 4줄)
