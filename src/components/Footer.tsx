@@ -38,7 +38,7 @@ export default function Footer() {
           <div>상호: 코딩하는 마녀 | 대표자: 강산</div>
           <div>사업자등록번호: 328-69-00642</div>
           <div>통신판매업신고번호: [발급 후 기재]</div>
-          <div>주소: [이전 후 비상주 사무실 주소 기재]</div>
+          <div>주소: 인천 서구 미래로 11, 1126-S8호 (22755)</div>
           <div>
             고객센터:{' '}
             <a href="mailto:help@witchsterminal.dev" style={{ color: GRAY_LINK, textDecoration: 'underline' }}>

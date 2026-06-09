@@ -15,13 +15,33 @@ const notoSansKr = Noto_Sans_KR({
   variable: '--font-noto-sans-kr'
 });
 
+const SITE_URL = "https://witchsterminal.dev";
+const NOINDEX = process.env.NEXT_PUBLIC_NOINDEX === "true";
+
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: "WITCH'S TERMINAL",
   description: "by Coding witch",
+  applicationName: "WITCH'S TERMINAL",
+  alternates: { canonical: "/" },
+  robots: NOINDEX
+    ? { index: false, follow: false }
+    : { index: true, follow: true },
+  openGraph: {
+    type: "website",
+    url: SITE_URL,
+    siteName: "WITCH'S TERMINAL",
+    title: "WITCH'S TERMINAL",
+    description: "by Coding witch",
+    locale: "ko_KR",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "WITCH'S TERMINAL",
+    description: "by Coding witch",
+  },
 };
 
-// viewportFit:cover → 노치/상태바 safe-area-inset 활성화
-// interactiveWidget:resizes-content → 키보드가 레이아웃 높이를 줄이도록(지원 브라우저)
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
@@ -37,20 +57,14 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="ko">
-      {/* 바깥(페이지)은 스크롤 금지 — 스크롤은 터미널 내부에서만. 사업자정보 푸터는 하단 고정.
-          height는 실제 보이는 높이(--app-h: visualViewport)로 잡아 키보드 열림/닫힘에 대응.
-          safe-area 패딩으로 상태바/노치/홈인디케이터에 가리지 않게 한다. */}
       <body
         className={`${robotoMono.variable} ${notoSansKr.variable} font-kr bg-black flex flex-col items-center overflow-hidden`}
         style={{
-          // 문서를 visualViewport 영역에 고정 — 키보드가 열려도 터미널이 위로 밀리지 않는다.
-          // top은 인앱 브라우저가 문서를 밀어올렸을 때의 offset(--app-top)을 따라가 항상 보이는 영역에 맞춘다.
           position: 'fixed',
           top: 'var(--app-top, 0px)',
           left: 0,
           right: 0,
           height: 'var(--app-h, 100svh)',
-          // 상태바/노치 높이는 폰마다 달라 safe-area로 맞추되, 0으로 오는 환경 대비 최소 여백 확보
           paddingTop: 'max(env(safe-area-inset-top), 8px)',
           paddingBottom: 'max(env(safe-area-inset-bottom), 8px)',
           paddingLeft: 'env(safe-area-inset-left)',
