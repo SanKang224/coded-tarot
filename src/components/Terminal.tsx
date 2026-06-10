@@ -2741,7 +2741,7 @@ export default function Terminal() {
             { key: 'terms', label: '[필수] 서비스 이용약관 동의', doc: 'terms' },
             { key: 'privacy', label: '[필수] 개인정보처리방침 동의', doc: 'privacy' },
           ];
-                    return (
+          return (
             <div className="flex flex-col gap-4 my-2" style={{ fontFamily: 'var(--font-roboto-mono), var(--font-noto-sans-kr), "Courier New", monospace', fontSize: '15px', color: '#00FF41' }}>
               {items.map(item => (
                 <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', padding: '6px 0' }}>
@@ -2773,6 +2773,7 @@ export default function Terminal() {
               </button>
             </div>
           );
+        })()}
 
         {/* 로그인 메뉴 */}
        {(step === 'login' || step === 'confirm_identity') && !isProcessing && (
