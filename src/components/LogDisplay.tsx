@@ -241,10 +241,12 @@ export default function LogDisplay({
   logs,
   onTap,
   skipTyping,
+  fast,
 }: {
   logs: LogType[];
   onTap?: (val: string) => void;
   skipTyping?: boolean;
+  fast?: boolean;
 }) {
   useEffect(() => { injectWitchStyle(); }, []);
 
@@ -256,7 +258,7 @@ export default function LogDisplay({
       {logs.map((log) => (
         // id 노출 — 특정 로그(예: 법적 문서 첫 줄)를 외부에서 scrollIntoView로 정렬하기 위함.
         <div key={log.id} id={`log-${log.id}`}>
-          <LogItem log={log} onTap={onTap} skipTyping={skipTyping} />
+          <LogItem log={log} onTap={onTap} skipTyping={skipTyping} fast={fast} />
         </div>
       ))}
     </div>
@@ -267,9 +269,11 @@ export default function LogDisplay({
 function WitchLogItem({
   log,
   skipTyping,
+  fast,
 }: {
   log: LogType;
   skipTyping?: boolean;
+  fast?: boolean;
 }) {
   const [displayedText, setDisplayedText] = useState(log.isTyping ? '' : log.text);
   const [done, setDone] = useState(!log.isTyping);
@@ -343,14 +347,16 @@ function LogItem({
   log,
   onTap,
   skipTyping,
+  fast,
 }: {
   log: LogType;
   onTap?: (val: string) => void;
   skipTyping?: boolean;
+  fast?: boolean;
 }) {
   // 마녀 독백 전용 렌더러
   if (log.type === 'witch') {
-    return <WitchLogItem log={log} skipTyping={skipTyping} />;
+    return <WitchLogItem log={log} skipTyping={skipTyping} fast={fast} />;
   }
 
   const [displayedText, setDisplayedText] = useState(log.isTyping ? '' : log.text);

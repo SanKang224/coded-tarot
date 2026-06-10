@@ -199,9 +199,10 @@ export default function Terminal() {
   const [step, setStep] = useState<FlowStep>('boot');
   const [isProcessing, setIsProcessing] = useState(false);
   const [skipTyping, setSkipTyping] = useState(false);
-  const introSkipRef = useRef(false); // 인트로(접속 우회 시퀀스) 스킵 플래그 (async 지연 단축용)
-  const [introSkipped, setIntroSkipped] = useState(false); // 스킵 시 타이핑도 즉시 완료
-  const [introRunning, setIntroRunning] = useState(false); // 인트로 재생 중 — 탭/클릭/엔터로 스킵 가능
+  const introFastRef = useRef(false); // 인트로(접속 우회 시퀀스) 빨리감기 플래그 (async 지연 속도용)
+  const introResolveRef = useRef<(() => void) | null>(null); // 대기 중인 지연을 즉시 종료
+  const [introFast, setIntroFast] = useState(false); // 빨리감기 중 — 타이핑도 3배속
+  const [introRunning, setIntroRunning] = useState(false); // 인트로 재생 중 — 탭/클릭/엔터로 빨리감기
 
   // 타이핑 애니메이션 스킵 트리거 — Enter/탭/클릭 시 호출
   const triggerSkipTyping = () => {
@@ -485,15 +486,15 @@ export default function Terminal() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoaded]);
 
-  // 인트로(접속 우회 시퀀스) 재생 중 — 아무 키/탭/클릭으로 빠르게 건너뛰기
+  // 인트로(접속 우회 시퀀스) 재생 중 — 아무 키/탭/클릭 → 남은 부분 3배속 빨리감기
   useEffect(() => {
     if (!introRunning) return;
-    const skip = () => { introSkipRef.current = true; setIntroSkipped(true); };
-    window.addEventListener('keydown', skip);
-    window.addEventListener('pointerdown', skip);
+    const fastForward = () => { introFastRef.current = true; setIntroFast(true); introResolveRef.current?.(); };
+    window.addEventListener('keydown', fastForward);
+    window.addEventListener('pointerdown', fastForward);
     return () => {
-      window.removeEventListener('keydown', skip);
-      window.removeEventListener('pointerdown', skip);
+      window.removeEventListener('keydown', fastForward);
+      window.removeEventListener('pointerdown', fastForward);
     };
   }, [introRunning]);
 
@@ -524,8 +525,11 @@ export default function Terminal() {
   // ─────────────────────────────────────────────────────────
 
   const runDelay = (ms: number) => new Promise(res => setTimeout(res, ms));
-  // 인트로(접속 우회 시퀀스) 전용 지연 — 스킵되면 이후 지연을 즉시 통과시킨다
-  const introDelay = (ms: number) => introSkipRef.current ? Promise.resolve() : runDelay(ms);
+  // 인트로 전용 지연 — 빨리감기면 3배속(ms/3), 대기 중 빨리감기 신호 오면 즉시 다음 줄로
+  const introDelay = (ms: number) => new Promise<void>((resolve) => {
+    const timer = setTimeout(() => { introResolveRef.current = null; resolve(); }, introFastRef.current ? ms / 3 : ms);
+    introResolveRef.current = () => { clearTimeout(timer); introResolveRef.current = null; resolve(); };
+  });
 
   const runConnectionSequence = async () => {
     const rndIp = () => Array.from({ length: 4 }, () => Math.floor(Math.random() * 254 + 1)).join('.');
@@ -538,9 +542,9 @@ export default function Terminal() {
     ];
     const greeting = greetings[Math.floor(Math.random() * greetings.length)];
 
-    // 스킵 가능 구간 시작
-    introSkipRef.current = false;
-    setIntroSkipped(false);
+    // 빨리감기 가능 구간 시작
+    introFastRef.current = false;
+    setIntroFast(false);
     setIntroRunning(true);
 
     addLog("- - - - - - - - - - - - - - - -", "separator");
@@ -570,10 +574,11 @@ export default function Terminal() {
     addLog(greeting, "system");
     await introDelay(250);
 
-    // 스킵 가능 구간 종료
+    // 빨리감기 구간 종료
     setIntroRunning(false);
-    introSkipRef.current = false;
-    setIntroSkipped(false);
+    introFastRef.current = false;
+    setIntroFast(false);
+    introResolveRef.current = null;
   };
 
   const logAlignmentAttempts = async (attempts: AlignmentAttempt[]) => {
@@ -2828,7 +2833,7 @@ export default function Terminal() {
       <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-y-auto hide-scrollbar relative">
         <div ref={contentRef}>
         <div className="pt-4">
-          <LogDisplay logs={logs} skipTyping={skipTyping || introSkipped} onTap={(val) => { triggerSkipTyping(); if (!isProcessing) handleUserInput(val); }} />
+          <LogDisplay logs={logs} skipTyping={skipTyping} fast={introFast} onTap={(val) => { triggerSkipTyping(); if (!isProcessing) handleUserInput(val); }} />
         </div>
 
         {/* 셔플 애니메이션 */}
