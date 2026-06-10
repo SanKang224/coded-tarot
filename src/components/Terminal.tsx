@@ -739,8 +739,27 @@ export default function Terminal() {
     setStep('login');
   };
 
+  // 인증 직후 — 탈퇴 처리된 계정이면 차단. true 반환 시 호출부에서 중단.
+  const guardDeleted = async (): Promise<boolean> => {
+    const supabase = createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return false;
+    const { data } = await supabase.from('profiles').select('deleted_at').eq('id', user.id).maybeSingle();
+    if (data?.deleted_at) {
+      await supabase.auth.signOut();
+      clearLogs();
+      addLog("■ 탈퇴 처리된 계정이다. 재가입·문의는 고객센터(help@witchsterminal.dev)로 연락하라.", "system");
+      setStep('boot');
+      setIsLoggedIn(false);
+      runBootSequence();
+      return true;
+    }
+    return false;
+  };
+
   // 로그인 직후 — 현재 버전 약관/방침 동의 여부 확인. 빠지면 동의 게이트, 아니면 메인.
   const enterAfterAuth = async (isNewUser: boolean) => {
+    if (await guardDeleted()) return;
     try {
       const res = await fetch('/api/consent');
       if (res.ok) {

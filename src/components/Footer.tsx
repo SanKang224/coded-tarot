@@ -38,8 +38,10 @@ export default function Footer() {
           <div>상호: 코딩하는 마녀 | 대표자: 강산</div>
           <div>사업자등록번호: 328-69-00642</div>
           <div>통신판매업신고번호: [발급 후 기재]</div>
-          <div>주소: 인천 서구 미래로 11, 1126-S8호 (22755)</div>
+          <div>주소: 인천 서구 미래로 11, 1126-S8호 (22755) (운영시간: [평일 00:00–00:00])</div>
+          <div>호스팅 제공: Vercel Inc.   |   결제대행: 토스페이먼츠(주)<div>
           <div>
+          
             고객센터:{' '}
             <a href="mailto:help@witchsterminal.dev" style={{ color: GRAY_LINK, textDecoration: 'underline' }}>
               help@witchsterminal.dev
