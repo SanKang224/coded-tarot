@@ -776,7 +776,27 @@ export default function Terminal() {
     setIsProcessing(false);
     await showMainMenu(postAuthNewUser);
   };
-
+  // 동의 게이트 취소 — 신규 가입(미동의)이면 방금 만들어진 계정까지 삭제 후 부팅
+  const cancelSignup = async () => {
+    setIsProcessing(true);
+    addLog("가입을 취소한다...", "system");
+    try {
+      if (consentMissing.age) { // age 기록 없음 = 신규 계정 → 삭제
+        await fetch('/api/account/delete', { method: 'POST' });
+      }
+    } catch { /* 삭제 실패해도 로그아웃은 진행 */ }
+    try { const supabase = createClient(); await supabase.auth.signOut(); } catch { /* 무시 */ }
+    clearLogs();
+    if (typeof window !== 'undefined') sessionStorage.removeItem(SPREAD_KEY);
+    setStep('boot');
+    setTokenCount(0);
+    setIsAdmin(false);
+    setIsLoggedIn(false);
+    setConsentPhase('age');
+    setConsents({ age: false, terms: false, privacy: false });
+    setIsProcessing(false);
+    runBootSequence();
+  };
   // 보관된 가입 동의를 서버에 기록 (best-effort). 로그인 성공 후 1회.
   const flushPendingConsent = async () => {
     if (typeof window === 'undefined') return;
@@ -2980,6 +3000,15 @@ export default function Terminal() {
               >
                 [동의하고 계속]
               </button>
+                            {consentPhase === 'doc' && (
+                <button
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => cancelSignup()}
+                  style={{ alignSelf: 'flex-start', marginTop: '2px', background: 'transparent', border: 'none', padding: 0, color: 'rgba(0,255,65,0.55)', fontFamily: 'inherit', fontSize: '13px', cursor: 'pointer', textDecoration: 'underline' }}
+                >
+                  [취소하고 나가기]
+                </button>
+              )}
             </div>
           );
         })()}
