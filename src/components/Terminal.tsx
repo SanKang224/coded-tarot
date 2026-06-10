@@ -1667,10 +1667,10 @@ export default function Terminal() {
     stickToBottomRef.current = false;
     const firstId = addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
     scrollAnchorIdRef.current = firstId;
-    addLog(`[${tag}] ${a.title}`, "system", false);
-    addLog(fmtDate(a.published_at), "system", false);
-    addLog("", "system", false);
-    a.body.split('\n').forEach(line => addLog(line, "system", false));
+    addLog(`[${tag}] ${a.title}`, "system", false, true);
+    addLog(fmtDate(a.published_at), "system", false, true);
+    addLog("\u00A0", "system", false, true);
+    a.body.split('\n').forEach(line => addLog(line === '' ? "\u00A0" : line, "system", false, true));
     addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
     addLog("[공지 목록으로]", "system");
   };
@@ -1713,7 +1713,7 @@ export default function Terminal() {
       if (clean.trim() === '') {
         addLog('', 'system', false);
       } else {
-        replayIds.push(addLog(clean, 'witch', true));
+        replayIds.push(addLog(clean, 'witch', true, true));
         await runDelay(160);
       }
     }

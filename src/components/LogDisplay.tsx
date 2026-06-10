@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { LogType } from '@/lib/useTerminalLog';
 
-const TERMINAL_FONT = 'var(--font-roboto-mono), var(--font-noto-sans-kr), "Courier New", monospace';
+const DOC_FONT_SIZE = '13px'; // 공지 본문·기록 재생 등 작은 '문서' 텍스트 (기본 16px). 더 키우거나 줄이려면 이 숫자만.
 
 const GLITCH_CHARS = '▓█░▒│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌▄▀■□▪▫';
 
@@ -331,7 +331,7 @@ function WitchLogItem({
   }, [done, log.text, log.dead]);
 
   return (
-    <span className={log.dead ? 'witch-dead' : 'witch-log'} style={{ fontFamily: TERMINAL_FONT, fontSize: '16px', lineHeight: '1.8', whiteSpace: 'pre-wrap', textDecoration: log.struck ? 'line-through' : undefined }}>
+    <span className={log.dead ? 'witch-dead' : 'witch-log'} style={{ fontFamily: TERMINAL_FONT, fontSize: log.small ? DOC_FONT_SIZE : '16px', lineHeight: '1.8', whiteSpace: 'pre-wrap', textDecoration: log.struck ? 'line-through' : undefined }}>
       {log.dead ? log.text : (glitched || displayedText)}
     </span>
   );
@@ -392,14 +392,14 @@ function LogItem({
 
   if (!hasClickable) {
     return (
-      <div className={`${colorClass} break-words whitespace-pre-wrap`}>
+      <div className={`${colorClass} break-words whitespace-pre-wrap`} style={log.small ? { fontSize: DOC_FONT_SIZE } : undefined}>
         {displayedText}
       </div>
     );
   }
 
   return (
-    <div className={`${colorClass} break-words whitespace-pre-wrap`}>
+    <div className={`${colorClass} break-words whitespace-pre-wrap`} style={log.small ? { fontSize: DOC_FONT_SIZE } : undefined}>
       {segments.map((seg, i) =>
         'clickValue' in seg ? (
           <button
