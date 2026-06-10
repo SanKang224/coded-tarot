@@ -265,7 +265,7 @@ export default function TossPaymentModal({ packageId, userId, onClose }: Props) 
             )}
           </div>
 
-          {/* 청약철회정책 전문 패널 (모달 내 오버레이) */}
+                    {/* 청약철회정책 전문 패널 (모달 내 오버레이) */}
           {showRefund && (
             <div style={{ position: 'absolute', inset: 0, background: '#000', zIndex: 3, display: 'flex', flexDirection: 'column' }}>
               <div style={{
@@ -283,6 +283,24 @@ export default function TossPaymentModal({ packageId, userId, onClose }: Props) 
               </div>
               <div style={{ flex: 1, minHeight: 0, overflowY: 'auto', padding: '16px 20px', color: '#00FF41', fontSize: '12px', lineHeight: 1.7, whiteSpace: 'pre-wrap' }}>
                 {REFUND}
+              </div>
+              {/* 하단 동의 + 닫기 — 우상단 [닫기]가 잘 안 보일 때 사용 */}
+              <div style={{
+                flexShrink: 0, borderTop: '1px solid rgba(0,255,65,0.25)',
+                padding: '14px 20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px',
+              }}>
+                <button
+                  onClick={() => { setRefundAgreed(true); setShowRefund(false); }}
+                  style={{ background: 'transparent', border: 'none', padding: '8px 0', color: '#00FF41', fontFamily: FONT, fontSize: '14px', fontWeight: 'bold', cursor: 'pointer' }}
+                >
+                  {refundAgreed ? '[x]' : '[ ]'} 동의
+                </button>
+                <button
+                  onClick={() => setShowRefund(false)}
+                  style={{ background: 'transparent', border: 'none', padding: '8px 12px', color: 'rgba(0,255,65,0.7)', fontFamily: FONT, fontSize: '14px', cursor: 'pointer' }}
+                >
+                  닫기 ✕
+                </button>
               </div>
             </div>
           )}

@@ -2742,10 +2742,9 @@ export default function Terminal() {
             { key: 'privacy', label: '[필수] 개인정보처리방침 동의', doc: 'privacy' },
           ];
           return (
-            <div className="flex flex-col gap-2 my-2" style={{ fontFamily: 'var(--font-roboto-mono), var(--font-noto-sans-kr), "Courier New", monospace', fontSize: '15px', color: '#00FF41' }}>
+                        <div className="flex flex-col gap-4 my-2" style={{ fontFamily: 'var(--font-roboto-mono), var(--font-noto-sans-kr), "Courier New", monospace', fontSize: '15px', color: '#00FF41' }}>
               {items.map(item => (
-                <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                  <button
+                <div key={item.key} style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', padding: '6px 0' }}>
                     onMouseDown={(e) => e.preventDefault()}
                     onClick={() => setConsents(c => ({ ...c, [item.key]: !c[item.key] }))}
                     style={{ background: 'transparent', border: 'none', padding: 0, color: '#00FF41', fontFamily: 'inherit', fontSize: 'inherit', cursor: 'pointer', textAlign: 'left' }}
