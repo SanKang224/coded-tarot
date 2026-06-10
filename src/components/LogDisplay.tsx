@@ -77,6 +77,19 @@ function parseClickable(text: string): Segment[] {
       i += replayM[0].length;
       continue;
     }
+    // [공지 NN] — 공지 열람 / [공지 목록으로] — 공지 목록 복귀
+    const noticeM = rest.match(/^\[공지\s+(\d+)\]/);
+    if (noticeM) {
+      segments.push({ text: noticeM[0], clickValue: `/notice ${parseInt(noticeM[1], 10)}` });
+      i += noticeM[0].length;
+      continue;
+    }
+    const noticeListM = rest.match(/^\[공지 목록으로\]/);
+    if (noticeListM) {
+      segments.push({ text: noticeListM[0], clickValue: '/notices' });
+      i += noticeListM[0].length;
+      continue;
+    }
 
     // [종료] — 재생 종료 후 가방으로 복귀
     const endM = rest.match(/^\[종료\]/);

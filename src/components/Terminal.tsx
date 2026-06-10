@@ -37,6 +37,9 @@ type FlowStep =
   | 'ready_to_draw' | 'card_draw'
   | 'token_shop' | 'token_shop_confirm'
   | 'bag' | 'bag_history' | 'confirm_end_session' | 'confirm_nav';
+  
+// 공지사항 (Supabase 대시보드에서 작성, 앱은 읽기 전용)
+type Notice = { id: string; kind: string; title: string; body: string; pinned: boolean; published_at: string };
 
 // 모바일에서 키보드를 자동으로 띄울 스텝 — 자유 텍스트 입력이 주 동작인 경우만.
 // 그 외(버튼/메뉴 스텝)에서는 키보드를 띄우지 않는다. (입력창을 직접 탭하면 언제든 입력 가능)
@@ -250,6 +253,7 @@ export default function Terminal() {
   const [bagReadings, setBagReadings] = useState<Array<{ id: string; session_id: string | null; created_at: string; question_text: string; reading_type: string; count: number; reading_content: string }>>([]); // 가방 기록(세션 그룹) 캐시 — 재생용
   const [bagPayments, setBagPayments] = useState<Array<{ created_at: string; amount: number; tokens_added: number; package_name: string }>>([]); // 가방 결제 내역 캐시
   const [replayIndex, setReplayIndex] = useState<number | null>(null); // 현재 재생 중인 기록의 인덱스 ([제거]/[추출] 대상)
+  const [notices, setNotices] = useState<Notice[]>([]); // 공지 목록 캐시 ([공지 NN] 열람용)
   const replayLogIdsRef = useRef<string[]>([]); // 방금 재생한 기록 로그들의 id ([제거]/[추출] 시 회색·취소선 처리 대상)
   const [questionDraft, setQuestionDraft] = useState<string[]>([]); // 카톡식 멀티라인 질문 작성 버퍼 ([입력 완료] 전까지 누적)
   const [periodKind, setPeriodKind] = useState<PeriodKind | null>(null); // 단일 기간 분할 선택 대기 중인 기간 종류
@@ -461,7 +465,8 @@ export default function Terminal() {
         } else {
           // OAuth 복귀 — 기존 로그 유지, step만 main으로 복원
           setStep('main');
-          addLog("[Q] 질문   [T] 토큰   [B] 가방", "system");
+          addLog("[Q] 질문   [T] 토큰   [B] 가방   [N] 공지", "system");
+          void checkUnreadNotices(); // 로그인 복귀 직후 안 읽은 공지 알림
         }
       } else {
         clearLogs();
@@ -665,7 +670,8 @@ export default function Terminal() {
       addLog("- - - - - - - - - - - - - - - -", "separator", false);
       await runDelay(300);
     }
-    addLog("[Q] 질문   [T] 토큰   [B] 가방", "system");
+    addLog("[Q] 질문   [T] 토큰   [B] 가방   [N] 공지", "system");
+    void checkUnreadNotices(); // 로그인/복귀 직후 안 읽은 공지 알림
     setIdentityConfirmed(false); // 새 질문 세션 시작 시 본인/타인 초기화
     setStep('main');
   };
@@ -1481,7 +1487,7 @@ export default function Terminal() {
     extinguishWitchLogs(); // 재생 독백이 있었다면 회색으로 꺼뜨림
     setQuestionDraft([]); // 작성 중이던 멀티라인 질문 버퍼 비움
     addLog("■ 무엇을 하고 싶은가?", "system");
-    addLog("[Q] 질문   [T] 토큰   [B] 가방", "system");
+    addLog("[Q] 질문   [T] 토큰   [B] 가방 [N] 공지", "system");
     setIdentityConfirmed(false);
     setStep('main');
   };
@@ -1610,6 +1616,82 @@ export default function Terminal() {
     return () => window.removeEventListener('witch-legal', handler);
   }, []);
 
+  // ─────────────────────────────────────────────────────────
+  // 공지사항 — 목록/열람 (읽기 전용, Supabase 대시보드에서 작성)
+  // ─────────────────────────────────────────────────────────
+  const NOTICE_SEEN_KEY = 'last_seen_notice';
+
+  const openNotices = async () => {
+    setIsProcessing(true);
+    addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
+    addLog("▶ 공지를 연다.", "system");
+    await runDelay(200);
+    try {
+      const res = await fetch('/api/notice');
+      const data = await res.json();
+      const list: Notice[] = data.notices ?? [];
+      setNotices(list);
+      if (list.length === 0) {
+        addLog("  공지 없음.", "system");
+      } else {
+        list.forEach((a, i) => {
+          const tag = a.kind === 'event' ? 'EVENT' : 'UPDATE';
+          const pin = a.pinned ? '★ ' : '';
+          addLog(`[공지 ${String(i + 1).padStart(2, '0')}] ${pin}[${tag}] ${a.title}`, "system");
+          addLog(`         ${fmtDate(a.published_at)}`, "system", false);
+        });
+        try {
+          const latest = list.reduce((m: string, a: Notice) => (a.published_at > m ? a.published_at : m), list[0].published_at);
+          localStorage.setItem(NOTICE_SEEN_KEY, latest);
+        } catch { /* storage 불가 시 무시 */ }
+      }
+    } catch {
+      addLog("■ 공지 회선 불안정.", "system");
+    }
+    addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
+    addLog("[돌아가기]", "system");
+    extinguishWitchLogs();
+    setIdentityConfirmed(false);
+    setStep('main');
+    setIsProcessing(false);
+  };
+
+  const showNotice = (n: number) => {
+    const a = notices[n - 1];
+    if (!a) {
+      addLog("■ 해당 공지를 찾을 수 없다. 공지를 다시 열어라.", "system");
+      return;
+    }
+    const tag = a.kind === 'event' ? 'EVENT' : 'UPDATE';
+    extinguishWitchLogs();
+    stickToBottomRef.current = false;
+    const firstId = addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
+    scrollAnchorIdRef.current = firstId;
+    addLog(`[${tag}] ${a.title}`, "system", false);
+    addLog(fmtDate(a.published_at), "system", false);
+    addLog("", "system", false);
+    a.body.split('\n').forEach(line => addLog(line, "system", false));
+    addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
+    addLog("[공지 목록으로]", "system");
+  };
+
+  // 로그인 직후 안 읽은 공지 알림 (last_seen 마커 기준)
+  const checkUnreadNotices = async () => {
+    try {
+      const res = await fetch('/api/notice');
+      if (!res.ok) return;
+      const data = await res.json();
+      const list: Notice[] = data.notices ?? [];
+      if (list.length === 0) return;
+      const latest = list.reduce((m: string, a: Notice) => (a.published_at > m ? a.published_at : m), list[0].published_at);
+      let seen: string | null = null;
+      try { seen = localStorage.getItem(NOTICE_SEEN_KEY); } catch { /* 무시 */ }
+      if (!seen || latest > seen) {
+        const unread = seen ? list.filter(a => a.published_at > seen!).length : list.length;
+        addLog(`■ 읽지 않은 공지 ${unread}건. [N] 공지 에서 확인하라.`, "system");
+      }
+    } catch { /* 알림 실패는 흐름을 막지 않는다 */ }
+  };
   const replayReading = async (n: number) => {
     const r = bagReadings[n - 1];
     if (!r) {
@@ -1703,6 +1785,11 @@ export default function Terminal() {
       await showPaymentHistory();
       return;
     }
+
+    // 공지사항 — [N] 공지 목록 / [공지 NN] 열람
+    if (input.trim().toLowerCase() === '/notices') { await openNotices(); return; }
+    const noticeCmd = input.trim().match(/^\/notice\s+(\d+)$/i);
+    if (noticeCmd) { showNotice(parseInt(noticeCmd[1], 10)); return; }
 
     // 법적 고지 — [이용약관]/[개인정보처리방침]/[청약철회정책]
     if (input.trim().toLowerCase() === '/terms') { showLegalDoc('terms'); return; }
@@ -2361,10 +2448,15 @@ export default function Terminal() {
         // 질문·타로 관련 키워드 (ㄱㄱ·할래·해줘 등 후치사 무관)
         return /질문|고민|물어|타로|봐줘|봐줄래|봐 줘|카드|리딩|점봐|점 봐|뽑아|궁금|상담|운세|점괘/.test(lower);
       };
-      const isBagIntent = (s: string) => {
+     const isBagIntent = (s: string) => {
         const t = s.trim().toUpperCase();
         if (['B', 'ㅠ', '가방', '/BAG', '/bag'].includes(t)) return true;
         return /가방|히스토리|기록|내역|과거|이전/.test(s.trim());
+      };
+      const isNoticeIntent = (s: string) => {
+        const t = s.trim().toUpperCase();
+        if (['N', '공지', '/NOTICE', '/NOTICES'].includes(t)) return true;
+        return /공지|알림|업데이트|이벤트/.test(s.trim());
       };
       if (isQuestionIntent(input)) {
         setIsProcessing(true);
@@ -2376,10 +2468,12 @@ export default function Terminal() {
         setQuestionContext([]);
         setStep('ask_question');
         setIsProcessing(false);
+      } else if (isNoticeIntent(input)) {
+        await openNotices();
       } else if (isBagIntent(input)) {
         await openBag();
       } else {
-        addLog("■ 알 수 없는 입력. [Q] [T] [B] 중 하나를 입력하라.", "system");
+        addLog("■ 알 수 없는 입력. [Q] [T] [B] [N] 중 하나를 입력하라.", "system");
       }
       return;
     }
