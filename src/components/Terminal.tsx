@@ -800,8 +800,12 @@ export default function Terminal() {
     setIsProcessing(true);
     addLog("가입을 취소한다...", "system");
     try {
-      if (consentMissing.age) { // age 기록 없음 = 신규 계정 → 삭제
-        await fetch('/api/account/delete', { method: 'POST' });
+      if (consentMissing.age) { // age 기록 없음 = 신규 계정 → 완전 삭제(재가입 허용)
+        await fetch('/api/account/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ mode: 'abandon' }),
+        });
       }
     } catch { /* 삭제 실패해도 로그아웃은 진행 */ }
     try { const supabase = createClient(); await supabase.auth.signOut(); } catch { /* 무시 */ }
