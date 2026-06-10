@@ -620,6 +620,38 @@ export default function Terminal() {
     addLog("▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓", "system", false);
   };
 
+  // 마녀의 인지 — 플랜 확정 직후, 시스템 정리에 앞서 호출.
+  // 확정 질문이 담지 못한 고민의 결을 마녀가 혼잣말(witch 로그)로 되짚는다.
+  // 호출 실패 시 조용히 건너뛴다 — 리딩 흐름은 막지 않는다.
+  const renderWitchAcknowledgment = async (context: string[], plan: ReadingPlan) => {
+    try {
+      const res = await fetch('/api/acknowledge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          history: context.join('\n'),
+          positions: plan.positions.map(p => `${p.name} > ${p.question}`),
+        }),
+      });
+      const data = await res.json();
+      const text: string = (data.acknowledgment ?? '').trim();
+      if (!text) return;
+
+      const lines = text
+        .split('\n')
+        .map((l: string) => l.replace(/^[■✦\s"]+|"+$/g, '').trim())
+        .filter(Boolean);
+
+      for (const line of lines) {
+        addLog(line, "witch");
+        await runDelay(200);
+      }
+      addLog("", "system", false);
+    } catch {
+      // 인지 실패 — 무시하고 시스템 정리로 진행
+    }
+  };
+
   // ─────────────────────────────────────────────────────────
   // Auth / Token
   // ─────────────────────────────────────────────────────────
@@ -1026,6 +1058,9 @@ export default function Terminal() {
 
       if (plan) {
         // 경우 A — 플랜 확정
+        // 시스템이 질문을 정리하기 전에, 마녀가 고민의 결을 혼잣말로 먼저 되짚는다.
+        await renderWitchAcknowledgment(context, plan);
+
         setReadingPlan(plan);
         setQuestionAttempts(0);
         addLog("■ [READING_PLAN_DETECTED] :: 포지션 설계 완료", "system");
