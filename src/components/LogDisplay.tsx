@@ -298,7 +298,7 @@ function WitchLogItem({
         clearInterval(interval);
         setDone(true);
       }
-    }, 20);
+    }, fast ? 3 : 20);
     return () => clearInterval(interval);
   }, [log]);
 
@@ -372,7 +372,7 @@ function LogItem({
         clearInterval(interval);
         setDone(true);
       }
-    }, 15);
+    }, fast ? 2 : 15)
     return () => clearInterval(interval);
   }, [log]);
 

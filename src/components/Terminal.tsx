@@ -525,9 +525,9 @@ export default function Terminal() {
   // ─────────────────────────────────────────────────────────
 
   const runDelay = (ms: number) => new Promise(res => setTimeout(res, ms));
-  // 인트로 전용 지연 — 빨리감기면 3배속(ms/3), 대기 중 빨리감기 신호 오면 즉시 다음 줄로
+  // 인트로 전용 지연 — 빨리감기면 3배속(ms/6), 대기 중 빨리감기 신호 오면 즉시 다음 줄로
   const introDelay = (ms: number) => new Promise<void>((resolve) => {
-    const timer = setTimeout(() => { introResolveRef.current = null; resolve(); }, introFastRef.current ? ms / 3 : ms);
+    const timer = setTimeout(() => { introResolveRef.current = null; resolve(); }, introFastRef.current ? ms / 6 : ms);
     introResolveRef.current = () => { clearTimeout(timer); introResolveRef.current = null; resolve(); };
   });
 
