@@ -1,3 +1,4 @@
+import { LEGAL_VERSIONS } from '@/lib/legalDocs';
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase-server';
 
@@ -51,4 +52,27 @@ export async function POST(req: Request) {
   }
 
   return NextResponse.json({ ok: true, recorded: rows.length });
+
+  // 현재 정책 버전 기준 동의 필요 여부. age_14는 1회(버전 무관), terms/privacy는 현재 버전 일치 필요.
+export async function GET() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return NextResponse.json({ error: 'UNAUTHORIZED' }, { status: 401 });
+
+  const { data, error } = await supabase
+    .from('user_consents')
+    .select('consent_type, policy_version')
+    .eq('user_id', user.id);
+  if (error) {
+    console.error('[consent] status select error:', error);
+    return NextResponse.json({ error: 'DB_SELECT_FAILED' }, { status: 500 });
+  }
+
+  const rows = data ?? [];
+  const missing = {
+    age: !rows.some(r => r.consent_type === 'age_14'),
+    terms: !rows.some(r => r.consent_type === 'terms' && r.policy_version === LEGAL_VERSIONS.terms),
+    privacy: !rows.some(r => r.consent_type === 'privacy' && r.policy_version === LEGAL_VERSIONS.privacy),
+  };
+  return NextResponse.json({ needsConsent: missing.age || missing.terms || missing.privacy, missing });
 }
