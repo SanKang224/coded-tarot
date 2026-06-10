@@ -248,7 +248,10 @@ export default function Terminal() {
   const [pendingPackageId, setPendingPackageId] = useState<number | null>(null); // 선택 중인 토큰 패키지
   const [pendingEmail, setPendingEmail] = useState<string>(''); // 이메일 로그인 중 임시 저장
   const [loginMode, setLoginMode] = useState<'login' | 'signup'>('login'); // 이메일 로그인/가입 모드
-  const [consents, setConsents] = useState({ age: false, terms: false, privacy: false }); // 가입 전 필수 동의
+  const [consents, setConsents] = useState({ age: false, terms: false, privacy: false }); // 동의 게이트 체크 상태
+  const [consentPhase, setConsentPhase] = useState<'age' | 'doc'>('age'); // age=로그인 전 연령 / doc=로그인 후 약관·방침
+  const [consentMissing, setConsentMissing] = useState({ age: true, terms: true, privacy: true }); // 로그인 후 빠진 동의 항목
+  const [postAuthNewUser, setPostAuthNewUser] = useState(false); // 동의 후 메인 진입 시 신규유저 여부
   const [pendingReshuffleCtx, setPendingReshuffleCtx] = useState<{ context: string[]; ownerFlag: boolean } | null>(null);
   const [readingSessionSummary, setReadingSessionSummary] = useState<string>(''); // 이번 세션 리딩 누적 요약 (덱 리셋에도 유지)
   const [choiceTexts, setChoiceTexts] = useState<{ opt1: string; opt2: string } | null>(null); // CHOICE 예시 텍스트 저장
@@ -468,12 +471,10 @@ export default function Terminal() {
           setIsProcessing(true);
           await runConnectionSequence();
           setIsProcessing(false);
-          await showMainMenu(isNewUser);
+          await enterAfterAuth(isNewUser);
         } else {
-          // OAuth 복귀 — 기존 로그 유지, step만 main으로 복원
-          setStep('main');
-          addLog("[Q] 질문   [T] 토큰   [B] 가방   [N] 공지", "system");
-          void checkUnreadNotices(); // 로그인 복귀 직후 안 읽은 공지 알림
+          // OAuth 복귀 — 로그인 완료. 동의 확인 후 메인.
+          await enterAfterAuth(isNewUser);
         }
       } else {
         clearLogs();
@@ -722,27 +723,58 @@ export default function Terminal() {
     await runDelay(400);
     addLog("14세 미만은 이용할 수 없다.", "system");
     await runDelay(800);
-    addLog("계속하려면 아래 필수 항목에 모두 동의하라.", "system");
+    addLog("계속하려면 만 14세 이상임을 확인하라.", "system");
+    setConsentPhase('age');
     setStep('consent');
     setIsProcessing(false);
   };
 
   // 필수 동의 완료 → 로그인 방법 선택으로
   // 동의 시각·버전을 보관 → 로그인 직후 flushPendingConsent()가 서버에 기록.
+  // 14세 이상 확인(로그인 전) → 로그인 방법 선택. 약관/방침 동의는 로그인 후(가입 시).
   const proceedToLogin = () => {
-    try {
-      sessionStorage.setItem(PENDING_CONSENT_KEY, JSON.stringify({
-        agreedAt: new Date().toISOString(),
-        consents: [
-          { type: 'age_14', version: LEGAL_VERSIONS.age },
-          { type: 'terms', version: LEGAL_VERSIONS.terms },
-          { type: 'privacy', version: LEGAL_VERSIONS.privacy },
-        ],
-      }));
-    } catch { /* storage 불가 시 기록은 건너뜀 (게이트는 이미 통과) */ }
+    try { sessionStorage.setItem('age_confirmed', new Date().toISOString()); } catch { /* 무시 */ }
     addLog("로그인 방법을 선택하라.", "system");
     setMenuIndex(0);
     setStep('login');
+  };
+
+  // 로그인 직후 — 현재 버전 약관/방침 동의 여부 확인. 빠지면 동의 게이트, 아니면 메인.
+  const enterAfterAuth = async (isNewUser: boolean) => {
+    try {
+      const res = await fetch('/api/consent');
+      if (res.ok) {
+        const { missing } = await res.json();
+        if (missing.terms || missing.privacy) {
+          setConsentMissing(missing);
+          setPostAuthNewUser(isNewUser);
+          setConsentPhase('doc');
+          addLog("가입을 마치려면 약관에 동의하라.", "system");
+          setStep('consent');
+          return;
+        }
+      }
+    } catch { /* 조회 실패 시 게이트 건너뛰고 진행 */ }
+    await showMainMenu(isNewUser);
+  };
+
+  // 동의 게이트(가입) 제출 → 빠진 항목 서버 기록 후 메인.
+  const submitDocConsent = async () => {
+    setIsProcessing(true);
+    const toRecord = [
+      consentMissing.age && { type: 'age_14', version: LEGAL_VERSIONS.age },
+      consentMissing.terms && { type: 'terms', version: LEGAL_VERSIONS.terms },
+      consentMissing.privacy && { type: 'privacy', version: LEGAL_VERSIONS.privacy },
+    ].filter(Boolean);
+    try {
+      await fetch('/api/consent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ agreedAt: new Date().toISOString(), consents: toRecord }),
+      });
+    } catch { /* 기록 실패는 흐름을 막지 않는다 */ }
+    setIsProcessing(false);
+    await showMainMenu(postAuthNewUser);
   };
 
   // 보관된 가입 동의를 서버에 기록 (best-effort). 로그인 성공 후 1회.
@@ -804,7 +836,7 @@ export default function Terminal() {
         return;
       }
       const { isNewUser } = await loadTokenBalance();
-      await showMainMenu(isNewUser);
+      await enterAfterAuth(isNewUser);
     } else {
       const { error } = await supabase.auth.signUp({ email: pendingEmail, password });
       if (error) {
@@ -1577,6 +1609,8 @@ export default function Terminal() {
         addLog("[이용약관]", "system");
         addLog("[개인정보처리방침]", "system");
         addLog("[청약철회정책]", "system");
+        addLog("", "system", false);
+        addLog("[회원 탈퇴]", "system");
       }
     } catch {
       addLog("■ 기록 회선 불안정.", "system");
@@ -1895,6 +1929,49 @@ export default function Terminal() {
     if (input.trim().toLowerCase() === '/clear') {
       clearLogs();
       addLog('[SYS] 터미널이 초기화되었다.', 'system', false);
+      return;
+    }
+    // /withdraw — 회원 탈퇴 안내
+    if (input.trim().toLowerCase() === '/withdraw') {
+      addLog("■ 회원 탈퇴 시 계정과 모든 기록(리딩·결제·토큰)이 영구 삭제된다. 되돌릴 수 없다.", "system");
+      addLog("정말 탈퇴하려면 [탈퇴 확정]을 누르거나 /withdraw confirm 을 입력하라.", "system");
+      addLog("[탈퇴 확정]   [돌아가기]", "system");
+      return;
+    }
+    // /withdraw confirm — 실제 삭제 실행
+    if (input.trim().toLowerCase() === '/withdraw confirm') {
+      setIsProcessing(true);
+      addLog("계정을 삭제한다...", "system");
+      try {
+        const res = await fetch('/api/account/delete', { method: 'POST' });
+        if (res.ok) {
+          const supabase = createClient();
+          await supabase.auth.signOut();
+          clearLogs();
+          if (typeof window !== 'undefined') sessionStorage.removeItem(SPREAD_KEY);
+          setStep('boot');
+          setTokenCount(0);
+          setIsAdmin(false);
+          setIsLoggedIn(false);
+          setQuestionContext([]);
+          setReadingPlan(null);
+          setQuestionAttempts(0);
+          setDrawnCards([]);
+          setCardReadings([]);
+          setCurrentDeck([]);
+          setDeckIndex(0);
+          setSessionCount(0);
+          setCopySnapshot(null);
+          setReadingSessionSummary('');
+          setIsProcessing(false);
+          runBootSequence();
+          return;
+        }
+        addLog("■ 탈퇴 실패. 잠시 후 다시 시도하라.", "system");
+      } catch {
+        addLog("■ 탈퇴 회선 불안정. 다시 시도하라.", "system");
+      }
+      setIsProcessing(false);
       return;
     }
 
@@ -2864,12 +2941,15 @@ export default function Terminal() {
 
         {/* 가입 전 필수 동의 게이트 */}
         {step === 'consent' && !isProcessing && (() => {
-          const allChecked = consents.age && consents.terms && consents.privacy;
-          const items: Array<{ key: 'age' | 'terms' | 'privacy'; label: string; doc?: 'terms' | 'privacy' }> = [
+          const allItems: Array<{ key: 'age' | 'terms' | 'privacy'; label: string; doc?: 'terms' | 'privacy' }> = [
             { key: 'age', label: '[필수] 만 14세 이상입니다' },
             { key: 'terms', label: '[필수] 서비스 이용약관 동의', doc: 'terms' },
             { key: 'privacy', label: '[필수] 개인정보처리방침 동의', doc: 'privacy' },
           ];
+          const items = consentPhase === 'age'
+            ? allItems.filter(it => it.key === 'age')
+            : allItems.filter(it => it.key !== 'age' && consentMissing[it.key]);
+          const allChecked = items.every(it => consents[it.key]);
           return (
             <div className="flex flex-col gap-4 my-2" style={{ fontFamily: 'var(--font-roboto-mono), var(--font-noto-sans-kr), "Courier New", monospace', fontSize: '15px', color: '#00FF41' }}>
               {items.map(item => (
@@ -2895,7 +2975,7 @@ export default function Terminal() {
               <button
                 disabled={!allChecked}
                 onMouseDown={(e) => e.preventDefault()}
-                onClick={() => { if (allChecked) proceedToLogin(); }}
+                onClick={() => { if (!allChecked) return; if (consentPhase === 'age') proceedToLogin(); else submitDocConsent(); }}
                 style={{ alignSelf: 'flex-start', marginTop: '6px', background: 'transparent', border: 'none', padding: 0, color: '#00FF41', fontFamily: 'inherit', fontSize: 'inherit', fontWeight: 'bold', textDecoration: 'underline', cursor: allChecked ? 'pointer' : 'default', opacity: allChecked ? 1 : 0.35 }}
               >
                 [동의하고 계속]

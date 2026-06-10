@@ -132,10 +132,17 @@ function parseClickable(text: string): Segment[] {
       i += privacyM[0].length;
       continue;
     }
-    const refundM = rest.match(/^\[청약철회정책\]/);
-    if (refundM) {
-      segments.push({ text: refundM[0], clickValue: '/refund' });
-      i += refundM[0].length;
+    // [회원 탈퇴] / [탈퇴 확정]
+    const withdrawM = rest.match(/^\[회원 탈퇴\]/);
+    if (withdrawM) {
+      segments.push({ text: withdrawM[0], clickValue: '/withdraw' });
+      i += withdrawM[0].length;
+      continue;
+    }
+    const withdrawOkM = rest.match(/^\[탈퇴 확정\]/);
+    if (withdrawOkM) {
+      segments.push({ text: withdrawOkM[0], clickValue: '/withdraw confirm' });
+      i += withdrawOkM[0].length;
       continue;
     }
     // [제거] / [추출] — 재생 후 기록 조작
