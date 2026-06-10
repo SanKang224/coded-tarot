@@ -199,6 +199,9 @@ export default function Terminal() {
   const [step, setStep] = useState<FlowStep>('boot');
   const [isProcessing, setIsProcessing] = useState(false);
   const [skipTyping, setSkipTyping] = useState(false);
+  const introSkipRef = useRef(false); // 인트로(접속 우회 시퀀스) 스킵 플래그 (async 지연 단축용)
+  const [introSkipped, setIntroSkipped] = useState(false); // 스킵 시 타이핑도 즉시 완료
+  const [introRunning, setIntroRunning] = useState(false); // 인트로 재생 중 — 탭/클릭/엔터로 스킵 가능
 
   // 타이핑 애니메이션 스킵 트리거 — Enter/탭/클릭 시 호출
   const triggerSkipTyping = () => {
@@ -460,7 +463,10 @@ export default function Terminal() {
           addLog("- - - - - - - - - - - - - - - -", "separator", false);
           addLog("■ 진행 중이던 리딩을 복원했다. 이어서 진행하라.", "system");
         } else if (logs.length === 0) {
-          // 새 탭 or 새로고침 후 세션 복귀 — 메인 메뉴만 표시
+          // 새 탭 or 새로고침 후 세션 복귀 — 접속 우회 인트로 후 메인 메뉴
+          setIsProcessing(true);
+          await runConnectionSequence();
+          setIsProcessing(false);
           await showMainMenu(isNewUser);
         } else {
           // OAuth 복귀 — 기존 로그 유지, step만 main으로 복원
@@ -478,6 +484,18 @@ export default function Terminal() {
     init();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isLoaded]);
+
+  // 인트로(접속 우회 시퀀스) 재생 중 — 아무 키/탭/클릭으로 빠르게 건너뛰기
+  useEffect(() => {
+    if (!introRunning) return;
+    const skip = () => { introSkipRef.current = true; setIntroSkipped(true); };
+    window.addEventListener('keydown', skip);
+    window.addEventListener('pointerdown', skip);
+    return () => {
+      window.removeEventListener('keydown', skip);
+      window.removeEventListener('pointerdown', skip);
+    };
+  }, [introRunning]);
 
   // 스프레드 상태 영속화 — 복원 완료 후, 활성 리딩일 때만 저장 (새로고침/결제 복귀 대비)
   useEffect(() => {
@@ -506,6 +524,8 @@ export default function Terminal() {
   // ─────────────────────────────────────────────────────────
 
   const runDelay = (ms: number) => new Promise(res => setTimeout(res, ms));
+  // 인트로(접속 우회 시퀀스) 전용 지연 — 스킵되면 이후 지연을 즉시 통과시킨다
+  const introDelay = (ms: number) => introSkipRef.current ? Promise.resolve() : runDelay(ms);
 
   const runConnectionSequence = async () => {
     const rndIp = () => Array.from({ length: 4 }, () => Math.floor(Math.random() * 254 + 1)).join('.');
@@ -518,8 +538,13 @@ export default function Terminal() {
     ];
     const greeting = greetings[Math.floor(Math.random() * greetings.length)];
 
+    // 스킵 가능 구간 시작
+    introSkipRef.current = false;
+    setIntroSkipped(false);
+    setIntroRunning(true);
+
     addLog("- - - - - - - - - - - - - - - -", "separator");
-    await runDelay(150);
+    await introDelay(150);
     addLog(`>> SIGNAL_DETECTED :: INITIATING_HANDSHAKE...`, "system");
     await runDelay(400);
     addLog(`>> REROUTING: ${rndIp()} → ${rndIp()} → ${rndIp()}`, "system");
@@ -543,7 +568,12 @@ export default function Terminal() {
     addLog("- - - - - - - - - - - - - - - -", "separator");
     await runDelay(200);
     addLog(greeting, "system");
-    await runDelay(250);
+    await introDelay(250);
+
+    // 스킵 가능 구간 종료
+    setIntroRunning(false);
+    introSkipRef.current = false;
+    setIntroSkipped(false);
   };
 
   const logAlignmentAttempts = async (attempts: AlignmentAttempt[]) => {
@@ -2798,7 +2828,7 @@ export default function Terminal() {
       <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-y-auto hide-scrollbar relative">
         <div ref={contentRef}>
         <div className="pt-4">
-          <LogDisplay logs={logs} skipTyping={skipTyping} onTap={(val) => { triggerSkipTyping(); if (!isProcessing) handleUserInput(val); }} />
+          <LogDisplay logs={logs} skipTyping={skipTyping || introSkipped} onTap={(val) => { triggerSkipTyping(); if (!isProcessing) handleUserInput(val); }} />
         </div>
 
         {/* 셔플 애니메이션 */}

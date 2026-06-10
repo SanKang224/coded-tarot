@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { LogType } from '@/lib/useTerminalLog';
 
+const TERMINAL_FONT = 'var(--font-roboto-mono), var(--font-noto-sans-kr), "Courier New", monospace';
 const DOC_FONT_SIZE = '13px'; // 공지 본문·기록 재생 등 작은 '문서' 텍스트 (기본 16px). 더 키우거나 줄이려면 이 숫자만.
 
 const GLITCH_CHARS = '▓█░▒│┤╡╢╖╕╣║╗╝╜╛┐└┴┬├─┼╞╟╚╔╩╦╠═╬╧╨╤╥╙╘╒╓╫╪┘┌▄▀■□▪▫';
