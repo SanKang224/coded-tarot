@@ -652,6 +652,64 @@ export default function Terminal() {
     }
   };
 
+  // 조언 유도 — 리딩 완료 직후 호출.
+  // 결과가 질문자의 바람에 어긋날 때만, 마녀 혼잣말(witch 로그) + [조언] 버튼을 노출한다.
+  // 어긋나지 않거나 호출 실패 시 아무것도 출력하지 않는다(꼬리질문 안내만 남는다).
+  const renderAdviceNudge = async (
+    readings: CardReadingResult[],
+    synthesis: string,
+    questionContextStr: string,
+    readingType?: string,
+  ): Promise<void> => {
+    if (!readings || readings.length === 0) return;
+    try {
+      const res = await fetch('/api/advice-nudge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          questionContext: questionContextStr,
+          readings: readings.map(r => ({
+            positionName: r.positionName,
+            positionQuestion: r.positionQuestion,
+            cardNameKo: r.cardNameKo,
+            isReversed: r.isReversed,
+            reading: r.reading,
+          })),
+          synthesis,
+          readingType,
+        }),
+      });
+      const data = await res.json();
+      const strip = (l: string) => l.replace(/^[■✦\s"]+|"+$/g, '').trim();
+
+      // 1) 조언 유도 — 결과가 욕망에 어긋날 때: 마녀 혼잣말 + [조언]
+      if (data.againstDesire) {
+        const nudge: string = (data.nudge ?? '').trim();
+        for (const line of nudge.split('\n').map(strip).filter(Boolean)) {
+          addLog(line, "witch");
+          await runDelay(200);
+        }
+        addLog("[조언]", "system");
+      }
+
+      // 2) 꼬리질문 제안 — 결과가 정보적으로 열려 있을 때(이스터에그):
+      //    마녀가 궁금증을 대변하는 혼잣말 + 탭하면 바로 뽑히는 [▷ 질문]들
+      const followUps: string[] = Array.isArray(data.followUps) ? data.followUps : [];
+      if (data.curiosity && followUps.length > 0) {
+        const murmur: string = (data.murmur ?? '').trim();
+        for (const line of murmur.split('\n').map(strip).filter(Boolean)) {
+          addLog(line, "witch");
+          await runDelay(200);
+        }
+        for (const q of followUps.slice(0, 2)) {
+          addLog(`[▷ ${q}]`, "system");
+        }
+      }
+    } catch {
+      // 조언/궁금증 유도 실패 — 무시
+    }
+  };
+
   // ─────────────────────────────────────────────────────────
   // Auth / Token
   // ─────────────────────────────────────────────────────────
@@ -1307,7 +1365,6 @@ export default function Terminal() {
           }
           const readingData = await res.json();
           const reading: string = readingData.reading ?? '';
-          const isNegativeReading: boolean = readingData.isNegative ?? drawn.isReversed;
           if (!reading) {
             addLog("■ 오라클 회선 불안정. 토큰은 차감되지 않았다. 잠시 후 다시 시도하라.", "system");
           } else {
@@ -1315,11 +1372,6 @@ export default function Terminal() {
             addLog(`✦ 타이밍`, "system");
             addLog(`   "언제 가능한가"`, "system");
             reading.split('\n').filter(l => l.trim()).map(l => l.replace(/\[조언\]/g, '').replace(/\s+$/, '')).filter(Boolean).forEach(line => addLog(line, "system"));
-            const remainingDraws = 15 - (newSessionCount + 1);
-            if (isNegativeReading && remainingDraws > 0) {
-              addLog("대응 가능한 궤적이다. 개입 여지가 있다.", "system");
-              addLog("[조언]", "system");
-            }
             addLog("- - - - - - - - - - - - - - - -", "separator", false);
             accReadings = [...accReadings, {
               positionName: '타이밍', positionQuestion: '언제 가능한가',
@@ -1413,6 +1465,7 @@ export default function Terminal() {
 
     // 종합 해석: 모든 포지션이 채워졌고 카드가 2장 이상일 때
     const allPositionsFilled = newPendingIdx >= readingPlan.positions.length;
+    let synthesisText = '';
     if (allPositionsFilled && readingPlan.positions.length >= 2) {
       addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
       addLog("✦ 종합", "system");
@@ -1429,6 +1482,7 @@ export default function Terminal() {
         });
         const synthData = await synthRes.json();
         const synthesis: string = synthData.synthesis ?? '카드들은 모두 제 자리에 놓였다.';
+        synthesisText = synthesis;
         synthesis.split('\n').filter(l => l.trim()).forEach(line => addLog(line, "system"));
       } catch {
         addLog("■ 종합 회선 불안정.", "system");
@@ -1480,7 +1534,9 @@ export default function Terminal() {
       addLog(`>> 잔여 드로우 ${15 - newSessionCount}/15`, "system");
       addLog("복사 또는 /copy 입력 시 전체 결과를 클립보드로 추출할 수 있다.", "system");
       addLog("", "system", false);
-      addLog("[조언]   꼬리질문이 있으면 입력하라.", "system");
+      // 조언 유도 — 결과가 욕망에 어긋날 때만 마녀 혼잣말 + [조언]을 띄운다. 그 아래 꼬리질문 안내(시스템).
+      await renderAdviceNudge(accReadings, synthesisText, questionContext.join('\n'), readingPlan?.type);
+      addLog("꼬리질문이 있으면 입력하라.", "system");
       // 꼬리질문: context·plan 리셋 (cardReadings는 다음 뽑기 시작 시 초기화)
       // 주제 감지를 위해 현재 컨텍스트를 저장한 뒤 초기화
       setPrevTopicContext(questionContext.join(' '));
@@ -2625,8 +2681,28 @@ export default function Terminal() {
     // 빈 입력(엔터)은 confirm 계열 스텝에서만 허용 (Y로 처리)
     const confirmSteps: FlowStep[] = ['confirm_plan', 'confirm_flow_config', 'confirm_context', 'confirm_identity', 'ask_flow_period', 'login'];
     if (input === '' && !confirmSteps.includes(step)) return;
-    // 조언 버튼 센티넬은 사람 말투 대신 기계톤으로 echo
-    addLog(input === '__ADVICE_REQ__' ? '>> REQ: 조언' : input, 'user');
+    // 센티넬 echo 보정: 조언은 기계톤, 꼬리질문 제안은 제안된 질문 그대로
+    const echoText = input === '__ADVICE_REQ__'
+      ? '>> REQ: 조언'
+      : input.startsWith('__FOLLOWUP__')
+        ? input.slice('__FOLLOWUP__'.length)
+        : input;
+    addLog(echoText, 'user');
+
+    // 꼬리질문 제안 버튼(센티넬) — 단계와 무관하게 멀티라인 누적을 건너뛰고 바로 분석/드로로 직행
+    if (input.startsWith('__FOLLOWUP__')) {
+      const followUpQ = input.slice('__FOLLOWUP__'.length).trim();
+      if (followUpQ) {
+        const updated = [...questionContext, followUpQ];
+        setQuestionContext(updated);
+        if (questionContext.length > 0 || identityConfirmed) {
+          await processAnalysis(updated, isOwner);
+        } else {
+          await processPreAnalysis(updated);
+        }
+      }
+      return;
+    }
 
     // main
     if (step === 'main') {

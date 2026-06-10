@@ -71,6 +71,14 @@ function parseClickable(text: string): Segment[] {
       continue;
     }
 
+    // [▷ 질문] — 꼬리질문 제안. 탭하면 그 질문으로 바로 진행(센티넬에 질문 텍스트를 실어 전달)
+    const followupM = rest.match(/^\[▷\s*([^\]]+)\]/);
+    if (followupM) {
+      segments.push({ text: followupM[0], clickValue: '__FOLLOWUP__' + followupM[1].trim() });
+      i += followupM[0].length;
+      continue;
+    }
+
     // [재생 NN] — 가방 기록 재생
     const replayM = rest.match(/^\[재생\s+(\d+)\]/);
     if (replayM) {
