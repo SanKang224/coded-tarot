@@ -51,9 +51,10 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: 'DB_INSERT_FAILED' }, { status: 500 });
   }
 
-  return NextResponse.json({ ok: true, recorded: rows.length });
+   return NextResponse.json({ ok: true, recorded: rows.length });
+}
 
-  // 현재 정책 버전 기준 동의 필요 여부. age_14는 1회(버전 무관), terms/privacy는 현재 버전 일치 필요.
+// 현재 정책 버전 기준 동의 필요 여부. age_14는 1회(버전 무관), terms/privacy는 현재 버전 일치 필요.
 export async function GET() {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
