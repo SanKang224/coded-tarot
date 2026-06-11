@@ -8,6 +8,7 @@ export type LogType = {
   dead?: boolean; // witch 독백 발광 종료 → 회색 죽은 글자 처리
   struck?: boolean; // 제거된 기록 → 취소선
   small?: boolean; // 작은 글씨 (공지 본문·기록 재생)
+  justify?: boolean; // 버튼들을 한 줄에서 양끝 정렬(space-between) — 메인 메뉴
 };
 
 // sessionStorage: 탭/브라우저 닫으면 초기화 → 새 방문은 항상 fresh
@@ -57,14 +58,15 @@ export function useTerminalLog() {
     }
   }, [logs, isLoaded]);
 
-  const addLog = (text: string, type: LogType['type'], animate = true, small = false) => {
+  const addLog = (text: string, type: LogType['type'], animate = true, small = false, justify = false) => {
     const id = crypto.randomUUID();
     setLogs(prev => [...prev, {
       id,
       text,
       type,
       isTyping: (type === 'system' || type === 'witch') && animate,
-      small
+      small,
+      justify
     }]);
     return id;
   };

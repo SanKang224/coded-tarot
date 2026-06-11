@@ -57,7 +57,7 @@ const LOGIN_OPTIONS = ['google', 'kakao'];
 // 진행 중인 스프레드를 새로고침/결제 리다이렉트에도 복원하기 위한 sessionStorage 키
 const SPREAD_KEY = 'coded_tarot_spread';
 // 배포 확인용 빌드 태그 — 부팅 화면에 표시된다. 새 코드 올릴 때마다 올린다.
-const BUILD_TAG = '0611-1';
+const BUILD_TAG = '0611-4';
 
 // 가입 동의 게이트는 로그인 전(비인증)에 통과하므로, 동의 내역을 잠시 보관했다가
 // OAuth 리다이렉트 복귀/로그인 직후 서버에 기록한다.
@@ -280,7 +280,7 @@ export default function Terminal() {
   const MAX_KEPT = 10; // 기록 보관 상한(스프레드 단위)
   const [bagDeleteMode, setBagDeleteMode] = useState(false); // bag_history를 삭제 선택용으로 재사용할 때 true
   const [expandedQ, setExpandedQ] = useState<Set<number>>(new Set()); // 삭제 목록에서 [▼]로 질문 전체를 펼친 항목
-  const [pendingDelete, setPendingDelete] = useState<{ index: number; session_id: string | null; id: string } | null>(null); // 삭제 확인 대기 기록
+  const [selectedToDelete, setSelectedToDelete] = useState<Set<number>>(new Set()); // 삭제 모드에서 선택된 기록 인덱스(여러 개 가능)
   const currentOptions = step === 'login' ? LOGIN_OPTIONS
     : step === 'confirm_identity' ? ['Y', 'N']
     : step === 'bag_history' ? bagReadings.map((_, i) => String(i + 1))
@@ -381,7 +381,9 @@ export default function Terminal() {
     container.addEventListener('scroll', onScroll, { passive: true });
 
     const mo = new MutationObserver(follow);
-    mo.observe(content, { childList: true, subtree: true, characterData: true });
+    // 새 줄(childList)만 추적한다. characterData(글자 교체=마녀 글리치)는 높이가 안 변하므로
+    // 추적하지 않는다 — 글리치마다 바닥으로 끌어내려 스크롤이 끊기던 문제 방지. 타이핑 성장은 ResizeObserver가 따라간다.
+    mo.observe(content, { childList: true, subtree: true });
 
     // content 높이 변화 + container 높이 변화(키보드 열림/닫힘) 모두 추적
     const ro = new ResizeObserver(follow);
@@ -830,7 +832,7 @@ export default function Terminal() {
       addLog("- - - - - - - - - - - - - - - -", "separator", false);
       await runDelay(300);
     }
-    addLog("[Q]질문 [T]토큰 [B]가방 [N]공지", "system");
+    addLog("[Q]질문 [T]토큰 [B]가방 [N]공지", "system", false, false, true);
     void checkUnreadNotices(); // 로그인/복귀 직후 안 읽은 공지 알림
     setIdentityConfirmed(false); // 새 질문 세션 시작 시 본인/타인 초기화
     setStep('main');
@@ -1641,7 +1643,8 @@ export default function Terminal() {
     addLog("- - - - - - - - - - - - - - - -", "separator");
     addLog("무엇을 알고 싶은가.", "system");
     addLog("마녀의 카드는 들을 준비가 되었다.", "system");
-    addLog("다듬지 마라. 날것일수록 좋다. [입력 완료].", "system");
+    addLog("다듬지 마라. 날것일수록 좋다.", "system");
+    addLog("한 줄씩 적어도 된다. 다 말했으면 [입력 완료].", "system");
     setStep('ask_question');
     setIsProcessing(false);
   };
@@ -1741,7 +1744,7 @@ export default function Terminal() {
     extinguishWitchLogs(); // 재생 독백이 있었다면 회색으로 꺼뜨림
     setQuestionDraft([]); // 작성 중이던 멀티라인 질문 버퍼 비움
     addLog("■ 무엇을 하고 싶은가?", "system");
-    addLog("[Q]질문 [T]토큰 [B]가방 [N]공지", "system");
+    addLog("[Q]질문 [T]토큰 [B]가방 [N]공지", "system", false, false, true);
     setIdentityConfirmed(false);
     setStep('main');
   };
@@ -1865,16 +1868,21 @@ export default function Terminal() {
     });
   };
 
-  // 삭제 목록에서 기록 선택 → 삭제 확인 단계로.
-  const promptDeleteConfirm = (idx: number) => {
-    const t = bagReadings[idx];
-    if (!t) return;
-    const q = t.question_text?.trim() || '(제목 없음)';
+  // 삭제 모드 — 기록 선택 토글(여러 개 가능).
+  const toggleSelectDelete = (idx: number) => {
+    setSelectedToDelete(prev => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx); else next.add(idx);
+      return next;
+    });
+  };
+
+  // 선택한 기록들 일괄 삭제 확인 단계로.
+  const confirmDeleteSelected = () => {
+    if (selectedToDelete.size === 0) return;
     addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
-    addLog(`▶ 선택: ${fmtDate(t.created_at)}  Q: ${q}`, "system");
-    addLog("이 기록을 지울까?", "system");
+    addLog(`선택한 ${selectedToDelete.size}개 기록을 지울까?`, "system");
     addLog("[Y] 삭제   [N] 취소", "system");
-    setPendingDelete({ index: idx, session_id: t.session_id, id: t.id });
     setMenuIndex(0);
     setStep('bag_delete_confirm');
   };
@@ -2084,11 +2092,14 @@ export default function Terminal() {
 
   const handleUserInput = async (input: string) => {
     if (isProcessing || step === 'analyzing') return;
-    // 동일 입력이 250ms 내에 다시 들어오면 무시 — keydown/keyup 등 어떤 경로의 중복이든 차단.
-    // (사람은 같은 메시지를 250ms 안에 두 번 보낼 수 없으므로 정상 입력은 막지 않는다)
+    // 동일 입력이 700ms 내에 다시 들어오면 무시 — 모바일 send키 중복·더블탭·keydown/keyup 중복 차단.
+    // (사람이 같은 질문을 700ms 안에 두 번 보낼 일은 없으므로 정상 입력은 막지 않는다)
     const _now = Date.now();
-    if (input === lastSubmitRef.current.value && _now - lastSubmitRef.current.time < 250) return;
+    if (input === lastSubmitRef.current.value && _now - lastSubmitRef.current.time < 700) return;
     lastSubmitRef.current = { value: input, time: _now };
+    // 센티넬(__XXX__)이 적절한 스텝 밖으로 새어 'user' 줄로 에코되는 것 차단.
+    // __COMPOSE_DONE__ 은 ask_question 에서만 의미가 있다(스테일 버튼 클릭 등은 무시).
+    if (input === '__COMPOSE_DONE__' && step !== 'ask_question') return;
     // 사용자 동작 → 새 출력은 바닥을 따라가도록 추적 재개.
     // (법적문서·기록재생 등 anchor 플로우는 이 핸들러 뒤에서 다시 false로 덮으므로 영향 없음)
     stickToBottomRef.current = true;
@@ -2467,11 +2478,11 @@ export default function Terminal() {
       return;
     }
 
-    // bag_history — 기록 선택. 일반 모드=재생 / 삭제 모드=삭제 확인.
+    // bag_history — 기록 선택. 일반 모드=재생 / 삭제 모드=선택 토글(엔터=선택분 삭제).
     if (step === 'bag_history') {
       if (input === '') {
         if (bagReadings.length > 0) {
-          if (bagDeleteMode) promptDeleteConfirm(menuIndex);
+          if (bagDeleteMode) confirmDeleteSelected(); // 선택된 게 없으면 함수 내부에서 무시
           else await replayReading(menuIndex + 1);
         }
         return;
@@ -2479,7 +2490,7 @@ export default function Terminal() {
       const n = parseInt(input.trim(), 10);
       if (!Number.isNaN(n) && n >= 1 && n <= bagReadings.length) {
         addLog(input.trim(), 'user');
-        if (bagDeleteMode) promptDeleteConfirm(n - 1);
+        if (bagDeleteMode) toggleSelectDelete(n - 1);
         else await replayReading(n);
         return;
       }
@@ -2908,7 +2919,8 @@ export default function Terminal() {
         addLog("무엇을 알고 싶은가.", "system");
         await runDelay(400);
         addLog("마녀의 카드는 들을 준비가 되었다.", "system");
-        addLog("다듬지 마라. 날것일수록 좋다. [입력 완료].", "system");
+        addLog("다듬지 마라. 날것일수록 좋다.", "system");
+        addLog("한 줄씩 적어도 된다. 다 말했으면 [입력 완료].", "system");
         addLog("(/menu 입력 시 언제든 메인으로 돌아갈 수 있다.)", "system");
         setQuestionContext([]);
         setStep('ask_question');
@@ -2964,55 +2976,53 @@ export default function Terminal() {
       } else {
         setBagDeleteMode(true);
         setExpandedQ(new Set());
+        setSelectedToDelete(new Set());
         addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
         addLog("[ 삭제할 기록 선택 ]", "system");
-        addLog("  지울 기록의 번호를 누르거나 줄을 눌러라. [▼]로 질문 전체를 본다.", "system");
+        addLog("  지울 기록을 눌러 선택하라(여러 개 가능). [▼]로 질문 전체를 본다.", "system");
+        addLog(`  ${MAX_KEPT}개 이하로 줄이면 끝난다. 지금 ${bagReadings.length}개.`, "system");
         setMenuIndex(0);
         setStep('bag_history');
       }
       return;
     }
 
-    // bag_delete_confirm — 선택한 기록 삭제 확인
+    // bag_delete_confirm — 선택한 기록들 일괄 삭제 확인
     if (step === 'bag_delete_confirm') {
       const val = input.trim() === '' ? (currentOptions[menuIndex] ?? 'N') : input;
-      const t = pendingDelete;
-      if (isYes(val) && t) {
+      if (isYes(val) && selectedToDelete.size > 0) {
         setIsProcessing(true);
-        try {
-          const res = await fetch('/api/bag', {
-            method: 'DELETE',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ sessionId: t.session_id || undefined, id: t.id }),
-          });
-          if (res.ok) {
-            const next = bagReadings.filter((_, i) => i !== t.index);
-            setBagReadings(next);
-            setExpandedQ(new Set());
-            addLog("✦ 기록을 지웠다.", "system");
-            if (next.length > MAX_KEPT) {
-              addLog(`>> 현재 ${next.length}개 — ${next.length - MAX_KEPT}개 더 비워야 한다.`, "system");
-              setMenuIndex(0);
-              setStep('bag_history');
-            } else {
-              setBagDeleteMode(false);
-              addLog(`남은 기록 ${next.length}개. 정리 완료.`, "system");
-              await runDelay(300);
-              addLog("- - - - - - - - - - - - - - - -", "separator");
-              showMenuPrompt();
-            }
-          } else {
-            addLog("■ 삭제 실패. 잠시 후 다시 시도하라.", "system");
-            setStep('bag_history');
-          }
-        } catch {
-          addLog("■ 제거 회선 불안정.", "system");
-          setStep('bag_history');
+        const targets = [...selectedToDelete].map(i => bagReadings[i]).filter(Boolean);
+        let removed = 0;
+        for (const t of targets) {
+          try {
+            const res = await fetch('/api/bag', {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ sessionId: t.session_id || undefined, id: t.id }),
+            });
+            if (res.ok) removed++;
+          } catch { /* 개별 실패는 건너뛴다 */ }
         }
-        setPendingDelete(null);
+        const next = bagReadings.filter((_, i) => !selectedToDelete.has(i));
+        setBagReadings(next);
+        setSelectedToDelete(new Set());
+        setExpandedQ(new Set());
+        addLog(`✦ ${removed}개를 지웠다.`, "system");
+        if (next.length > MAX_KEPT) {
+          addLog(`>> 현재 ${next.length}개 — ${next.length - MAX_KEPT}개 더 비워야 한다.`, "system");
+          setMenuIndex(0);
+          setStep('bag_history');
+        } else {
+          setBagDeleteMode(false);
+          addLog(`남은 기록 ${next.length}개. 정리 완료.`, "system");
+          await runDelay(300);
+          addLog("- - - - - - - - - - - - - - - -", "separator");
+          showMenuPrompt();
+        }
         setIsProcessing(false);
       } else {
-        setPendingDelete(null);
+        // 취소 — 선택은 유지한 채 목록으로
         addLog("■ 취소.", "system");
         setMenuIndex(0);
         setStep('bag_history');
@@ -3145,8 +3155,11 @@ export default function Terminal() {
 
       if (!isComposeDone) {
         // 한 줄 누적 (카톡 메시지처럼 화면에 쌓인다)
+        const wasFirst = questionDraft.length === 0;
         addLog(input, 'user');
         setQuestionDraft(prev => [...prev, input]);
+        // 첫 줄을 쌓은 직후 한 번만 — 아직 전송 전임을 분명히 알려 다시 입력하는 혼선을 막는다.
+        if (wasFirst) addLog("■ 받아 적었다. 더 보탤 말이 있으면 잇고, 없으면 [입력 완료].", "system");
         return;
       }
 
@@ -3430,18 +3443,20 @@ export default function Terminal() {
           <div className="flex flex-col gap-1 my-2 font-mono text-[16px]">
             {bagReadings.map((r, idx) => {
               const isSel = idx === menuIndex;
+              const picked = bagDeleteMode && selectedToDelete.has(idx);
               const nn = String(idx + 1).padStart(2, '0');
               const q = r.question_text?.trim() || '(제목 없음)';
               const tail = r.count > 1 ? ` (+꼬리 ${r.count - 1})` : '';
               const expanded = expandedQ.has(idx);
+              const marker = bagDeleteMode ? (picked ? '[✓] ' : '[  ] ') : (isSel ? '▶ ' : '  ');
               return (
-                <div key={idx} className={isSel ? 'text-white' : 'text-[#00FF41]'}>
+                <div key={idx} className={(picked || isSel) ? 'text-white' : 'text-[#00FF41]'}>
                   <div className="flex items-center">
                     <span
-                      onClick={() => { triggerSkipTyping(); if (!isProcessing) { bagDeleteMode ? promptDeleteConfirm(idx) : replayReading(idx + 1); } }}
+                      onClick={() => { triggerSkipTyping(); if (!isProcessing) { bagDeleteMode ? toggleSelectDelete(idx) : replayReading(idx + 1); } }}
                       className="cursor-pointer flex-1 min-w-0 whitespace-nowrap overflow-hidden text-ellipsis"
                     >
-                  {isSel ? '▶ ' : '  '}[{nn}] {fmtDate(r.created_at)}{tail}  Q: {q}
+                  {marker}[{nn}] {fmtDate(r.created_at)}{tail}  Q: {q}
                     </span>
                     <span
                       onClick={() => { if (!isProcessing) toggleExpandQ(idx); }}
@@ -3457,24 +3472,30 @@ export default function Terminal() {
                 </div>
               );
             })}
-            <div
-              onClick={() => {
-                triggerSkipTyping();
-                if (isProcessing) return;
-                if (bagDeleteMode) {
-                  setBagDeleteMode(false);
-                  setExpandedQ(new Set());
-                  addLog("- - - - - - - - - - - - - - - -", "separator");
-                  showMenuPrompt();
-                } else {
-                  openBag();
-                }
-              }}
-              className="cursor-pointer text-[#00FF41] mt-2"
-              style={{ fontWeight: 'bold', textDecoration: 'underline' }}
-            >
-              {bagDeleteMode ? '[삭제 마치기]' : '[가방으로 돌아가기]'}
-            </div>
+            {bagDeleteMode ? (
+              <div className="mt-2 flex flex-col gap-1">
+                {selectedToDelete.size > 0 && (
+                  <div
+                    onClick={() => { triggerSkipTyping(); if (!isProcessing) confirmDeleteSelected(); }}
+                    className="cursor-pointer text-[#FF3300]"
+                    style={{ fontWeight: 'bold', textDecoration: 'underline' }}
+                  >
+                    [선택한 {selectedToDelete.size}개 삭제]
+                  </div>
+                )}
+                <div className="text-[rgba(0,255,65,0.6)] text-[13px]">
+                  {MAX_KEPT}개 이하로 줄이면 끝난다. (현재 {bagReadings.length}개)
+                </div>
+              </div>
+            ) : (
+              <div
+                onClick={() => { triggerSkipTyping(); if (!isProcessing) openBag(); }}
+                className="cursor-pointer text-[#00FF41] mt-2"
+                style={{ fontWeight: 'bold', textDecoration: 'underline' }}
+              >
+                [가방으로 돌아가기]
+              </div>
+            )}
           </div>
         )}
 
@@ -3508,14 +3529,16 @@ export default function Terminal() {
                 [마치기]
               </span>
             )}
-            <span
-              onMouseDown={(e) => e.preventDefault()}
-              onClick={() => { triggerSkipTyping(); if (!isProcessing) handleUserInput('/menu'); }}
-              className="cursor-pointer"
-              style={{ color: 'rgba(0,255,65,0.7)', textDecoration: 'underline' }}
-            >
-              [메뉴]
-            </span>
+            {sessionCount === 0 && (
+              <span
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => { triggerSkipTyping(); if (!isProcessing) handleUserInput('/menu'); }}
+                className="cursor-pointer"
+                style={{ color: 'rgba(0,255,65,0.7)', textDecoration: 'underline' }}
+              >
+                [메뉴]
+              </span>
+            )}
           </div>
         )}
 

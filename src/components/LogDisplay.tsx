@@ -445,6 +445,33 @@ function LogItem({
     );
   }
 
+  // 메인 메뉴 — 버튼들을 한 줄에서 양끝 정렬(space-between)로 펼친다.
+  if (log.justify) {
+    const btns = segments.filter(s => 'clickValue' in s);
+    return (
+      <div className="flex justify-between items-center w-full">
+        {btns.map((seg, i) =>
+          disabled ? (
+            <span key={i} style={{ color: 'rgba(0,255,65,0.3)', fontWeight: 'bold' }}>{seg.text}</span>
+          ) : (
+            <button
+              key={i}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => onTap(seg.clickValue!)}
+              style={{
+                fontFamily: TERMINAL_FONT, fontSize: 'inherit', color: '#00FF41',
+                background: 'transparent', border: 'none', padding: 0, cursor: 'pointer',
+                fontWeight: 'bold', textDecoration: 'underline', lineHeight: 'inherit',
+              }}
+            >
+              {seg.text}
+            </button>
+          )
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className={`${colorClass} break-words whitespace-pre-wrap`} style={log.small ? { fontSize: DOC_FONT_SIZE } : undefined}>
       {segments.map((seg, i) =>
