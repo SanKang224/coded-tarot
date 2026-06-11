@@ -3110,7 +3110,7 @@ export default function Terminal() {
       <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-y-auto hide-scrollbar relative">
         <div ref={contentRef}>
         <div className="pt-4">
-          <LogDisplay logs={logs} skipTyping={skipTyping} fast={introFast || replayFast}ndary} onTap={(val) => { triggerSkipTyping(); if (!isProcessing) handleUserInput(val); }} />
+          <LogDisplay logs={logs} skipTyping={skipTyping} fast={introFast || replayFast} activeBoundary={activeLogBoundary} onTap={(val) => { triggerSkipTyping(); if (!isProcessing) handleUserInput(val); }} />
         </div>
 
         {/* 셔플 애니메이션 */}
