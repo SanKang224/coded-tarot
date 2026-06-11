@@ -56,6 +56,8 @@ const LOGIN_OPTIONS = ['google', 'kakao'];
 
 // 진행 중인 스프레드를 새로고침/결제 리다이렉트에도 복원하기 위한 sessionStorage 키
 const SPREAD_KEY = 'coded_tarot_spread';
+// 배포 확인용 빌드 태그 — 부팅 화면에 표시된다. 새 코드 올릴 때마다 올린다.
+const BUILD_TAG = '0611-1';
 
 // 가입 동의 게이트는 로그인 전(비인증)에 통과하므로, 동의 내역을 잠시 보관했다가
 // OAuth 리다이렉트 복귀/로그인 직후 서버에 기록한다.
@@ -599,6 +601,8 @@ export default function Terminal() {
     addLog(`>> LOCATION: UNRESOLVABLE — SIGNAL_MASKED`, "system");
     await introDelay(250);
     addLog(`>> WARNING: 이 연결은 기록되지 않는다.`, "system");
+    await introDelay(250);
+    addLog(`>> BUILD: ${BUILD_TAG}`, "system");
     await introDelay(400);
     addLog("- - - - - - - - - - - - - - - -", "separator");
     await introDelay(200);
@@ -1417,7 +1421,7 @@ export default function Terminal() {
             readingSucceeded = true;
             addLog(`✦ 타이밍`, "system");
             addLog(`   "언제 가능한가"`, "system");
-            reading.split('\n').map(l => l.replace(/\[조언\]/g, '').replace(/\s+$/, '')).filter(l => l.trim()).forEach(line => { if (line.startsWith('SYSTEM:')) addLog("\u00A0", "system", false, true); addLog(line, "system", true, true); });
+            reading.split('\n').map(l => l.replace(/\[조언\]/g, '').replace(/\s+$/, '')).filter(l => l.trim()).forEach(line => { if (line.startsWith('SYSTEM:')) addLog("\u00A0", "system", false, true); addLog(line, "witch", true, true); });
             addLog("- - - - - - - - - - - - - - - -", "separator", false);
             accReadings = [...accReadings, {
               positionName: '타이밍', positionQuestion: '언제 가능한가',
@@ -1475,7 +1479,7 @@ export default function Terminal() {
           readingSucceeded = true;
           addLog(`✦ ${position.name}`, "system");
           addLog(`   "${position.question}"`, "system");
-          reading.split('\n').filter(l => l.trim()).map(l => l.replace(/\[조언\]/g, '').replace(/\s+$/, '')).filter(Boolean).forEach(line => addLog(line, "system"));
+          reading.split('\n').filter(l => l.trim()).map(l => l.replace(/\[조언\]/g, '').replace(/\s+$/, '')).filter(Boolean).forEach(line => addLog(line, "witch", true, true));
           addLog("- - - - - - - - - - - - - - - -", "separator", false);
           accReadings = [...accReadings, {
             positionName: position.name,
@@ -1529,7 +1533,7 @@ export default function Terminal() {
         const synthData = await synthRes.json();
         const synthesis: string = synthData.synthesis ?? '카드들은 모두 제 자리에 놓였다.';
         synthesisText = synthesis;
-        synthesis.split('\n').filter(l => l.trim()).forEach(line => addLog(line, "system", true, true));
+        synthesis.split('\n').filter(l => l.trim()).forEach(line => addLog(line, "witch", true, true));
       } catch {
         addLog("■ 종합 회선 불안정.", "system");
       }
@@ -1567,12 +1571,14 @@ export default function Terminal() {
 
     // 리딩 완료 후 처리
     await runDelay(600);
+    // 리딩 끝 안내(꼬리질문/마치기)는 무슨 일이 있어도 보여야 한다 → 추적 강제 재개.
+    stickToBottomRef.current = true;
     if (newSessionCount >= 15) {
       addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
       addLog("■ [SPREAD_EXHAUSTED] :: 이 주제에 대한 카드는 모두 소진되었다.", "system");
       await runDelay(300);
       addLog("마녀는 같은 주제를 다시 읽지 않는다.", "system");
-      addLog("다른 이야기가 있다면 입력하라. 들어주겠다.", "system");
+      addLog("다른 이야기가 있다면 입력하라.   끝내려면 [마치기]", "system");
       setStep('card_draw');
     } else {
       addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
@@ -1582,6 +1588,7 @@ export default function Terminal() {
       addLog("", "system", false);
       // 조언 유도 — 결과가 욕망에 어긋날 때만 마녀 혼잣말 + [조언]을 띄운다. 그 아래 꼬리질문 안내(시스템).
       await renderAdviceNudge(accReadings, synthesisText, questionContext.join('\n'), readingPlan?.type);
+      stickToBottomRef.current = true; // 조언 멘트로 밀려도 끝 안내는 보이도록 한 번 더
       addLog("꼬리질문이 있으면 입력하라.   더 궁금한 것이 없다면 [마치기]", "system");
       // 꼬리질문: context·plan 리셋 (cardReadings는 다음 뽑기 시작 시 초기화)
       // 주제 감지를 위해 현재 컨텍스트를 저장한 뒤 초기화
@@ -2082,8 +2089,17 @@ export default function Terminal() {
     const _now = Date.now();
     if (input === lastSubmitRef.current.value && _now - lastSubmitRef.current.time < 250) return;
     lastSubmitRef.current = { value: input, time: _now };
+    // 사용자 동작 → 새 출력은 바닥을 따라가도록 추적 재개.
+    // (법적문서·기록재생 등 anchor 플로우는 이 핸들러 뒤에서 다시 false로 덮으므로 영향 없음)
+    stickToBottomRef.current = true;
     setActiveLogBoundary(logs.length); // 새 액션 → 이전 줄들의 버튼 비활성화
     triggerSkipTyping();
+
+    // [마치기] — 리딩 끝에서 스프레드 종료 (단계 무관 전역 처리)
+    if (input === '__FINISH_SPREAD__') {
+      await finishSpread();
+      return;
+    }
 
     // /onboarding — 온보딩 재생 (개발/테스트용)
     if (input.trim().toLowerCase() === '/onboarding') {

@@ -213,6 +213,14 @@ function parseClickable(text: string): Segment[] {
       continue;
     }
 
+    // [마치기] — 리딩 끝, 스프레드 종료
+    const finishM = rest.match(/^\[마치기\]/);
+    if (finishM) {
+      segments.push({ text: finishM[0], clickValue: '__FINISH_SPREAD__' });
+      i += finishM[0].length;
+      continue;
+    }
+
     const enterM = rest.match(/^\[엔터\](?:\/Y)?/);
     if (enterM) {
       segments.push({ text: enterM[0], clickValue: '' });
