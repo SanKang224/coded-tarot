@@ -217,6 +217,13 @@ function parseClickable(text: string): Segment[] {
       i += backMenuM[0].length;
       continue;
     }
+    // [전부 뽑기] — 멀티 포지션 전부 선택
+    const drawAllM = rest.match(/^\[전부 뽑기\]/);
+    if (drawAllM) {
+      segments.push({ text: drawAllM[0], clickValue: '전부' });
+      i += drawAllM[0].length;
+      continue;
+    }
     // [입력 완료] — 카톡식 멀티라인 질문 작성 마무리
     const composeDoneM = rest.match(/^\[입력 완료\]/);
     if (composeDoneM) {

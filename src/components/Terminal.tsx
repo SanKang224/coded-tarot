@@ -32,7 +32,7 @@ type ReadingPlan = {
 type FlowStep =
   | 'boot' | 'consent' | 'login' | 'login_email' | 'login_email_type' | 'login_email_pw' | 'main'
   | 'ask_question' | 'confirm_identity' | 'analyzing'
-  | 'confirm_context' | 'select_type' | 'confirm_plan'
+  | 'confirm_context' | 'select_type' | 'confirm_plan' | 'select_positions'
   | 'confirm_flow_config' | 'ask_flow_period' | 'confirm_new_topic' | 'confirm_period_split'
   | 'ready_to_draw' | 'card_draw'
   | 'token_shop' | 'token_shop_confirm'
@@ -44,7 +44,7 @@ type Notice = { id: string; kind: string; title: string; body: string; pinned: b
 
 // 모바일에서 키보드를 자동으로 띄울 스텝 — 자유 텍스트 입력이 주 동작인 경우만.
 // 그 외(버튼/메뉴 스텝)에서는 키보드를 띄우지 않는다. (입력창을 직접 탭하면 언제든 입력 가능)
-const KEYBOARD_STEPS: FlowStep[] = ['login_email', 'login_email_pw', 'ask_question', 'ask_flow_period'];
+const KEYBOARD_STEPS: FlowStep[] = ['login_email', 'login_email_pw', 'ask_question', 'ask_flow_period', 'select_positions'];
 
 const TOKEN_PACKAGES = [
   { id: 1, tokens: 3,  price: '990원' },
@@ -57,7 +57,7 @@ const LOGIN_OPTIONS = ['google', 'kakao'];
 // 진행 중인 스프레드를 새로고침/결제 리다이렉트에도 복원하기 위한 sessionStorage 키
 const SPREAD_KEY = 'coded_tarot_spread';
 // 배포 확인용 빌드 태그 — 부팅 화면에 표시된다. 새 코드 올릴 때마다 올린다.
-const BUILD_TAG = '0611-10';
+const BUILD_TAG = '0611-11';
 
 // 가입 동의 게이트는 로그인 전(비인증)에 통과하므로, 동의 내역을 잠시 보관했다가
 // OAuth 리다이렉트 복귀/로그인 직후 서버에 기록한다.
@@ -193,6 +193,35 @@ function periodSplitPrompt(kind: PeriodKind): string[] {
   }
 }
 
+// 포지션 일부 선택 파서 — 숫자(1,3)·서수(첫번째)·전자/후자·마지막·내용("외모만")을 인식해
+// 선택된 포지션 인덱스(0-based)를 반환. 못 알아들으면 전부 반환(안전).
+function parsePositionSubset(raw: string, positions: { name: string; question: string }[]): number[] {
+  const s = raw.trim();
+  const N = positions.length;
+  const all = Array.from({ length: N }, (_, i) => i);
+  if (!s || /전부|모두|다\s*(볼|보|뽑)|all/i.test(s)) return all;
+  const picked = new Set<number>();
+  // 1) 숫자
+  (s.match(/\d+/g) || []).forEach(n => { const i = parseInt(n, 10) - 1; if (i >= 0 && i < N) picked.add(i); });
+  // 2) 한글 서수/지시어
+  const ordinals: [RegExp, number][] = [
+    [/첫|하나|일\s*번|전자/, 0],
+    [/둘|두\s*번|이\s*번|후자/, 1],
+    [/셋|세\s*번|삼\s*번/, 2],
+    [/넷|네\s*번|사\s*번/, 3],
+    [/다섯|오\s*번/, 4],
+    [/여섯|육\s*번/, 5],
+  ];
+  ordinals.forEach(([re, i]) => { if (i < N && re.test(s)) picked.add(i); });
+  if (/마지막|끝|막판/.test(s)) picked.add(N - 1);
+  // 3) 내용 매칭 — 포지션 이름/질문의 단어가 입력에 들어있으면 선택 (예: "외모만" → 외모 포지션)
+  positions.forEach((p, i) => {
+    const words = `${p.name} ${p.question}`.split(/[\s,·"]+/).filter(w => w.length >= 2);
+    if (words.some(w => s.includes(w))) picked.add(i);
+  });
+  return picked.size > 0 ? [...picked].sort((a, b) => a - b) : all;
+}
+
 // ─────────────────────────────────────────────────────────
 // Component
 // ─────────────────────────────────────────────────────────
@@ -224,6 +253,7 @@ export default function Terminal() {
   const [isOwner, setIsOwner] = useState<boolean>(true); // 본인 질문 여부
   const [identityConfirmed, setIdentityConfirmed] = useState<boolean>(false); // 이번 세션 본인/타인 확인 여부
   const [readingPlan, setReadingPlan] = useState<ReadingPlan | null>(null);
+  const [pendingPlanForChoice, setPendingPlanForChoice] = useState<ReadingPlan | null>(null); // 멀티 포지션 일부 선택 대기 중인 플랜
   const [tokenCount, setTokenCount] = useState<number>(0);
   const [isAdmin, setIsAdmin] = useState<boolean>(false);
   const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
@@ -1272,11 +1302,25 @@ export default function Terminal() {
     setIsProcessing(false);
   };
 
-  const processPlanConfirmation = async (plan: ReadingPlan) => {
+  const processPlanConfirmation = async (plan: ReadingPlan, skipPositionChoice = false) => {
     // 토큰 가드 — 토큰이 없으면 드로우 진입 차단 (관리자 제외)
     if (!isAdmin && tokenCount < 1) {
       addLog(`■ 토큰이 없다. (보유 ${tokenCount}) 카드를 깨우려면 충전이 필요하다.`, "system");
       addLog("[T] 토큰충전", "system");
+      return;
+    }
+    // 포지션이 둘 이상이면, 전부 볼지 일부만 볼지 먼저 묻는다(꼬리질문 제외 — 새 스프레드일 때만).
+    if (!skipPositionChoice && plan.positions.length >= 2 && currentDeck.length === 0) {
+      setPendingPlanForChoice(plan);
+      addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
+      addLog("■ 무엇을 볼까. 전부 볼 수도, 일부만 볼 수도 있다.", "system");
+      plan.positions.forEach((p, i) => {
+        addLog(`  ${i + 1}. ${p.name} — "${p.question}"`, "system");
+      });
+      addLog("보고 싶은 것을 말하라. (예: 1번 / 첫번째 / 마지막 / \"외모만\")", "system");
+      addLog("전부 보려면 [전부 뽑기].", "system");
+      setMenuIndex(0);
+      setStep('select_positions');
       return;
     }
     setIsProcessing(true);
@@ -2884,7 +2928,7 @@ export default function Terminal() {
     }
 
     // 빈 입력(엔터)은 confirm 계열 스텝에서만 허용 (Y로 처리)
-    const confirmSteps: FlowStep[] = ['confirm_plan', 'confirm_flow_config', 'confirm_context', 'confirm_identity', 'ask_flow_period', 'login'];
+    const confirmSteps: FlowStep[] = ['confirm_plan', 'confirm_flow_config', 'confirm_context', 'confirm_identity', 'ask_flow_period', 'login', 'select_positions'];
     if (input === '' && !confirmSteps.includes(step)) return;
     // 입력 echo는 여기 한 곳에서만 한다 — 각 스텝 핸들러는 따로 echo하지 않는다(중복 '두 줄 출력' 방지).
     //  - __ADVICE_REQ__ : 기계톤으로 치환
@@ -3312,6 +3356,23 @@ export default function Terminal() {
         await processAnalysis(corrected, isOwner);
       }
     }
+
+    // select_positions — 멀티 포지션 중 일부만 볼지 선택 (자연어 인식)
+    if (step === 'select_positions') {
+      const plan = pendingPlanForChoice;
+      if (!plan) { setStep('ask_question'); return; }
+      const idxs = parsePositionSubset(input, plan.positions);
+      setPendingPlanForChoice(null);
+      if (idxs.length >= plan.positions.length) {
+        await processPlanConfirmation(plan, true); // 전부
+        return;
+      }
+      const chosen = idxs.map(i => plan.positions[i]);
+      const filtered: ReadingPlan = { ...plan, positions: chosen, cardCount: chosen.length };
+      addLog(`■ 선택: ${chosen.map(p => p.name).join(', ')} (${chosen.length}장)`, "system");
+      await processPlanConfirmation(filtered, true);
+      return;
+    }
   };
 
   // ─────────────────────────────────────────────────────────
@@ -3599,7 +3660,7 @@ export default function Terminal() {
             disabled={isProcessing}
             focusKey={`${step}-${logs.length}`}
             wantKeyboard={KEYBOARD_STEPS.includes(step)}
-            allowEmpty={(['confirm_plan', 'confirm_flow_config', 'confirm_context', 'confirm_identity', 'ask_flow_period', 'confirm_new_topic', 'token_shop_confirm', 'login', 'confirm_end_session', 'bag_history', 'bag_cleanup_consent', 'bag_delete_confirm'] as FlowStep[]).includes(step)}
+            allowEmpty={(['confirm_plan', 'confirm_flow_config', 'confirm_context', 'confirm_identity', 'ask_flow_period', 'confirm_new_topic', 'token_shop_confirm', 'login', 'confirm_end_session', 'bag_history', 'bag_cleanup_consent', 'bag_delete_confirm', 'select_positions'] as FlowStep[]).includes(step)}
           />
         </div>
       )}
