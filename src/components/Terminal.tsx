@@ -826,7 +826,7 @@ export default function Terminal() {
       addLog("- - - - - - - - - - - - - - - -", "separator", false);
       await runDelay(300);
     }
-    addLog("[Q] 질문   [T] 토큰   [B] 가방   [N] 공지", "system");
+    addLog("[Q]질문 [T]토큰 [B]가방 [N]공지", "system");
     void checkUnreadNotices(); // 로그인/복귀 직후 안 읽은 공지 알림
     setIdentityConfirmed(false); // 새 질문 세션 시작 시 본인/타인 초기화
     setStep('main');
@@ -1734,7 +1734,7 @@ export default function Terminal() {
     extinguishWitchLogs(); // 재생 독백이 있었다면 회색으로 꺼뜨림
     setQuestionDraft([]); // 작성 중이던 멀티라인 질문 버퍼 비움
     addLog("■ 무엇을 하고 싶은가?", "system");
-    addLog("[Q] 질문   [T] 토큰   [B] 가방 [N] 공지", "system");
+    addLog("[Q]질문 [T]토큰 [B]가방 [N]공지", "system");
     setIdentityConfirmed(false);
     setStep('main');
   };
@@ -1790,6 +1790,7 @@ export default function Terminal() {
         addLog("[개인정보처리방침]", "system");
         addLog("[청약철회정책]", "system");
         addLog("", "system", false);
+        addLog("[로그아웃]", "system");
         addLog("[회원 탈퇴]", "system");
       }
     } catch {
@@ -2356,10 +2357,20 @@ export default function Terminal() {
       addLog(input.trim(), 'user');
       addLog("■ 메인으로 돌아간다.", "system");
       await runDelay(300);
+      // 진행 중인 스프레드 전체 닫기 (덱·세션 리셋 → 영속화 효과가 저장도 비운다)
       setQuestionContext([]);
       setReadingPlan(null);
       setQuestionAttempts(0);
       setCardReadings([]);
+      setCurrentDeck([]);
+      setDrawnCards([]);
+      setDeckIndex(0);
+      setSessionCount(0);
+      setDrawnDeckIndices(new Set());
+      setDrawnCardIds(new Set());
+      setReadingSessionSummary('');
+      setPrevTopicContext('');
+      setIdentityConfirmed(false);
       addLog("- - - - - - - - - - - - - - - -", "separator");
       showMenuPrompt();
       return;

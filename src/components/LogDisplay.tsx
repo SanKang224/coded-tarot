@@ -146,6 +146,13 @@ function parseClickable(text: string): Segment[] {
       i += refundM[0].length;
       continue;
     }
+    // [로그아웃] — 가방에서 세션 종료
+    const logoutM = rest.match(/^\[로그아웃\]/);
+    if (logoutM) {
+      segments.push({ text: logoutM[0], clickValue: '/logout' });
+      i += logoutM[0].length;
+      continue;
+    }
     // [회원 탈퇴] / [탈퇴 확정]
     const withdrawM = rest.match(/^\[회원 탈퇴\]/);
     if (withdrawM) {
@@ -213,7 +220,7 @@ function parseClickable(text: string): Segment[] {
       continue;
     }
 
-    const bracketLabelM = rest.match(/^(\[[A-Z]\])\s+([가-힣]+)/);
+    const bracketLabelM = rest.match(/^(\[[A-Z]\])\s*([가-힣]+)/);
     if (bracketLabelM) {
       const key = bracketLabelM[1][1];
       segments.push({ text: bracketLabelM[0], clickValue: key });
