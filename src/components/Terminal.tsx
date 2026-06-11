@@ -57,7 +57,7 @@ const LOGIN_OPTIONS = ['google', 'kakao'];
 // 진행 중인 스프레드를 새로고침/결제 리다이렉트에도 복원하기 위한 sessionStorage 키
 const SPREAD_KEY = 'coded_tarot_spread';
 // 배포 확인용 빌드 태그 — 부팅 화면에 표시된다. 새 코드 올릴 때마다 올린다.
-const BUILD_TAG = '0611-6';
+const BUILD_TAG = '0611-7';
 
 // 가입 동의 게이트는 로그인 전(비인증)에 통과하므로, 동의 내역을 잠시 보관했다가
 // OAuth 리다이렉트 복귀/로그인 직후 서버에 기록한다.
@@ -350,13 +350,14 @@ export default function Terminal() {
     let rafPending = false;
     const scrollToBottomNow = () => {
       lastProg = performance.now();
-      container.scrollTop = container.scrollHeight; // 즉시(동기) — DOM은 이미 갱신됨
+      // iOS Safari는 scrollTop 직접 대입이 자주 무시된다 → 끝 앵커로 scrollIntoView(수동 버튼과 동일 방식).
+      bottomRef.current?.scrollIntoView({ block: 'end' });
       if (rafPending) return;
       rafPending = true;
       requestAnimationFrame(() => {                  // 늦은 레이아웃(폰트/줄바꿈) 보정
         rafPending = false;
         lastProg = performance.now();
-        container.scrollTop = container.scrollHeight;
+        bottomRef.current?.scrollIntoView({ block: 'end' });
         updateHint();
       });
     };
@@ -414,18 +415,15 @@ export default function Terminal() {
       }
     }
     if (!stickToBottomRef.current) return;
-    const c = scrollContainerRef.current;
-    if (!c) return;
-    c.scrollTop = c.scrollHeight;                                  // 즉시
-    requestAnimationFrame(() => { c.scrollTop = c.scrollHeight; }); // 레이아웃 보정
+    // iOS Safari 대응 — scrollTop 대입 대신 끝 앵커로 scrollIntoView (수동 버튼과 동일, 확실히 동작).
+    bottomRef.current?.scrollIntoView({ block: 'end' });                                  // 즉시
+    requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ block: 'end' })); // 레이아웃 보정
   }, [logs, cardReadings, step, isShuffling, isLoaded]);
 
   // 맨 아래로 강제 스크롤 (▼ 표시 클릭 시)
   const scrollToBottom = () => {
-    const c = scrollContainerRef.current;
-    if (!c) return;
     stickToBottomRef.current = true;
-    c.scrollTop = c.scrollHeight;
+    bottomRef.current?.scrollIntoView({ block: 'end', behavior: 'smooth' });
     setShowScrollHint(false);
   };
 
@@ -3159,7 +3157,6 @@ export default function Terminal() {
 
       if (!isComposeDone) {
         // 한 줄 누적 (카톡 메시지처럼 화면에 쌓인다). echo는 위 전역 echo가 이미 했다.
-        // 누적되면 아래 [입력 완료] 버튼이 나타난다.
         setQuestionDraft(prev => [...prev, input]);
         return;
       }

@@ -25,7 +25,7 @@ CREATE POLICY "readings_select_own" ON public.readings
 CREATE POLICY "readings_insert_own" ON public.readings
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICYㅁ"readings_delete_own" ON public.readings
+CREATE POLICY"readings_delete_own" ON public.readings
   FOR DELETE USING (auth.uid() = user_id);
 
 -- 최근 10건 조회 성능을 위한 인덱스
