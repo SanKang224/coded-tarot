@@ -37,7 +37,7 @@ export default function InputLine({ onSubmit, onArrowKey, disabled, allowEmpty, 
   };
 
   const submitValue = () => {
-    const val = ref.current?.value.trim() || '';
+    const val = (ref.current?.value ?? '').replace(/\s*\n\s*/g, ' ').trim();
     if (!val && !allowEmpty) return;
     if (ref.current) {
       ref.current.value = '';
@@ -53,8 +53,8 @@ export default function InputLine({ onSubmit, onArrowKey, disabled, allowEmpty, 
       return;
     }
     if (e.key === 'Enter' && !e.shiftKey) {
-      // 한글 IME 조합 중이면 무시 (keyup에서 처리)
-      if (e.nativeEvent.isComposing) return;
+      // 한글 IME 조합 중이면 줄바꿈도 막고 제출도 안 한다 (두 줄 입력·중복 방지)
+      if (e.nativeEvent.isComposing || e.keyCode === 229) { e.preventDefault(); return; }
       e.preventDefault();
       enterHandledRef.current = true; // 이 Enter는 keydown에서 처리됨 → keyup은 건너뛴다
       submitValue();

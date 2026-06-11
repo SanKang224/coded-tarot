@@ -172,15 +172,13 @@ ${questionContext || '없음'}${timingHint ? `\n\n[타이밍 힌트]\n${timingHi
     const suggestVal = raw.match(/제안\s*[:：]\s*([^\n]+)/)?.[1]?.trim();
 
     const sysFields: [string, string | undefined][] = [
-      ['감지된 패턴 ', patternVal],
-      ['현재 궤적   ', trajVal],
-      ['제안        ', suggestVal],
+      ['감지된 패턴', patternVal],
+      ['현재 궤적', trajVal],
+      ['제안', suggestVal],
     ];
     const presentFields = sysFields.filter(([, v]) => v);
     const systemBlock = presentFields.length > 0
-      ? presentFields
-          .map(([label, v], i) => (i === 0 ? `SYSTEM > ${label}: ${v}` : `         ${label}: ${v}`))
-          .join('\n')
+      ? 'SYSTEM:\n' + presentFields.map(([label, v]) => `${label}: ${v}`).join('\n')
       : null;
 
     const parts = [verdict, interpret, systemBlock].filter(Boolean);

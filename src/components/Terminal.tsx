@@ -260,11 +260,16 @@ export default function Terminal() {
   const [bagReadings, setBagReadings] = useState<Array<{ id: string; session_id: string | null; created_at: string; question_text: string; reading_type: string; count: number; reading_content: string }>>([]); // 가방 기록(세션 그룹) 캐시 — 재생용
   const [bagPayments, setBagPayments] = useState<Array<{ created_at: string; amount: number; tokens_added: number; package_name: string }>>([]); // 가방 결제 내역 캐시
   const [replayIndex, setReplayIndex] = useState<number | null>(null); // 현재 재생 중인 기록의 인덱스 ([제거]/[추출] 대상)
+  const replayFastRef = useRef(false); // 기록 재생 빨리감기 플래그
+  const replayResolveRef = useRef<(() => void) | null>(null); // 대기 중 재생 지연 즉시 종료
+  const [replayFast, setReplayFast] = useState(false); // 재생 빨리감기 — 타이핑도 빠르게
+  const [replayRunning, setReplayRunning] = useState(false); // 재생 중 — 탭/클릭/엔터로 빨리감기
   const [notices, setNotices] = useState<Notice[]>([]); // 공지 목록 캐시 ([공지 NN] 열람용)
   const replayLogIdsRef = useRef<string[]>([]); // 방금 재생한 기록 로그들의 id ([제거]/[추출] 시 회색·취소선 처리 대상)
   const [questionDraft, setQuestionDraft] = useState<string[]>([]); // 카톡식 멀티라인 질문 작성 버퍼 ([입력 완료] 전까지 누적)
   const [periodKind, setPeriodKind] = useState<PeriodKind | null>(null); // 단일 기간 분할 선택 대기 중인 기간 종류
   const lastSubmitRef = useRef<{ value: string; time: number }>({ value: '', time: 0 }); // 동일 입력 중복 제출 차단(경로 무관)
+  const [activeLogBoundary, setActiveLogBoundary] = useState(0); // 이 인덱스 미만 로그의 버튼은 비활성(과거 줄)
   // 법적 문서를 출력할 때, 자동 하단 스크롤 대신 문서 첫 줄을 터미널 상단에 맞추기 위한 타겟 id.
   const scrollAnchorIdRef = useRef<string | null>(null);
   const [pendingNav, setPendingNav] = useState<'Q' | 'B' | null>(null); // 스프레드 중 QTB 이동 확인 대기
@@ -352,7 +357,12 @@ export default function Terminal() {
       scrollToBottomNow();
     };
 
+    let prevScrollTop = container.scrollTop;
     const onScroll = () => {
+      const st = container.scrollTop;
+      const scrolledUp = st < prevScrollTop - 2; // 사용자가 위로 올림 (프로그램 스크롤은 항상 아래로)
+      prevScrollTop = st;
+      if (scrolledUp) { stickToBottomRef.current = false; updateHint(); return; } // 글리치 자동스크롤에 안 먹히게 즉시 해제
       // 프로그램 스크롤이 유발한 이벤트는 stick 판정에서 제외 (사용자 의도만 반영)
       if (performance.now() - lastProg < 150) { updateHint(); return; }
       stickToBottomRef.current =
@@ -1225,6 +1235,12 @@ export default function Terminal() {
   };
 
   const processPlanConfirmation = async (plan: ReadingPlan) => {
+    // 토큰 가드 — 토큰이 없으면 드로우 진입 차단 (관리자 제외)
+    if (!isAdmin && tokenCount < 1) {
+      addLog(`■ 토큰이 없다. (보유 ${tokenCount}) 카드를 깨우려면 충전이 필요하다.`, "system");
+      addLog("[T] 토큰충전", "system");
+      return;
+    }
     setIsProcessing(true);
     addLog("■ [PLAN_LOCKED] :: 리딩 플랜 확정", "system");
     await runDelay(400);
@@ -1291,6 +1307,12 @@ export default function Terminal() {
 
   const processCardDraw = async (deckIndices: number[]) => {
     if (!readingPlan) return;
+    // 토큰 가드 — 뽑을 카드 수만큼 토큰이 있어야 한다 (관리자 제외)
+    if (!isAdmin && tokenCount < deckIndices.length) {
+      addLog(`■ 토큰이 부족하다. (보유 ${tokenCount} / 필요 ${deckIndices.length}장) 충전이 필요하다.`, "system");
+      addLog("[T] 토큰충전", "system");
+      return;
+    }
     setIsProcessing(true);
 
     const deckToUse = currentDeck.length > 0
@@ -1335,7 +1357,11 @@ export default function Terminal() {
         const timingNum = getTimingNumber(drawn.id);
         const timingHint = timingNum === 0
           ? `이 카드의 숫자는 0 또는 무한대다. 선고 첫 줄을 반드시 "기약 없다." 또는 "때가 되면 온다." 형태로 시작하라.`
-          : `이 카드의 숫자는 ${timingNum}이다. 질문 맥락을 보고 ${timingNum}일 / ${timingNum}주 / ${timingNum}개월 중 하나를 골라 선고 첫 줄을 반드시 "${timingNum}일이다." / "${timingNum}주다." / "${timingNum}개월이다." 형태로 시작하라. 숫자를 생략하거나 범위로 말하지 마라.`;
+          : `이 카드의 숫자는 ${timingNum}이다. 카드의 에너지(정/역방향·키워드·질문 맥락)로 흐름이 '빠른지/느린지'를 먼저 판단하라.
+- 빠른 흐름(순행·가벼움·정방향): ${timingNum}일 또는 ${timingNum}주 중 한두 개를 구체적으로 제시.
+- 느린 흐름(정체·무거움·역방향): ${timingNum}달 또는 ${timingNum}년 중 한두 개를 구체적으로 제시.
+선고 첫 줄은 반드시 그 구체적 기간으로 시작하라. 예: "${timingNum}일, 길어도 ${timingNum}주다." / "빠르면 ${timingNum}달, 늦으면 ${timingNum}년이다."
+'빠르다/느리다'처럼 모호하게만 말하지 마라. 반드시 일·주·달·년 중 한두 개의 구체적 기간을 명시하라.`;
         addLog("✦ 오라클이 읽는다...", "system");
         let readingSucceeded = false;
         try {
@@ -1371,7 +1397,7 @@ export default function Terminal() {
             readingSucceeded = true;
             addLog(`✦ 타이밍`, "system");
             addLog(`   "언제 가능한가"`, "system");
-            reading.split('\n').filter(l => l.trim()).map(l => l.replace(/\[조언\]/g, '').replace(/\s+$/, '')).filter(Boolean).forEach(line => addLog(line, "system"));
+            reading.split('\n').map(l => l.replace(/\[조언\]/g, '').replace(/\s+$/, '')).filter(l => l.trim()).forEach(line => { if (line.startsWith('SYSTEM:')) addLog("\u00A0", "system", false, true); addLog(line, "system", true, true); });
             addLog("- - - - - - - - - - - - - - - -", "separator", false);
             accReadings = [...accReadings, {
               positionName: '타이밍', positionQuestion: '언제 가능한가',
@@ -1483,7 +1509,7 @@ export default function Terminal() {
         const synthData = await synthRes.json();
         const synthesis: string = synthData.synthesis ?? '카드들은 모두 제 자리에 놓였다.';
         synthesisText = synthesis;
-        synthesis.split('\n').filter(l => l.trim()).forEach(line => addLog(line, "system"));
+        synthesis.split('\n').filter(l => l.trim()).forEach(line => addLog(line, "system", true, true));
       } catch {
         addLog("■ 종합 회선 불안정.", "system");
       }
@@ -1895,6 +1921,19 @@ export default function Terminal() {
       }
     } catch { /* 알림 실패는 흐름을 막지 않는다 */ }
   };
+    // 기록 재생 지연 — 슬로우 기본, 빨리감기면 1/4 + 대기 중 즉시 종료
+  const replayDelay = (ms: number) => new Promise<void>((resolve) => {
+    const timer = setTimeout(() => { replayResolveRef.current = null; resolve(); }, replayFastRef.current ? ms / 4 : ms);
+    replayResolveRef.current = () => { clearTimeout(timer); replayResolveRef.current = null; resolve(); };
+  });
+  // 재생 중 아무 키/탭/클릭 → 빨리감기
+  useEffect(() => {
+    if (!replayRunning) return;
+    const ff = () => { replayFastRef.current = true; setReplayFast(true); replayResolveRef.current?.(); };
+    window.addEventListener('keydown', ff);
+    window.addEventListener('pointerdown', ff);
+    return () => { window.removeEventListener('keydown', ff); window.removeEventListener('pointerdown', ff); };
+  }, [replayRunning]);
   const replayReading = async (n: number) => {
     const r = bagReadings[n - 1];
     if (!r) {
@@ -1907,22 +1946,28 @@ export default function Terminal() {
     addLog(`▶ 기록 재생 :: [${String(n).padStart(2,'0')}]  ${fmtDate(r.created_at)}`, "system");
     await runDelay(600);
 
-    // 재생은 온보딩 독백처럼 글리치·네온(witch) 효과로 흐른다
-    // 재생한 witch 로그 id를 모아둔다 → [제거]/[추출] 시 그 줄들만 회색·취소선 처리
+    // 사람 말 속도로 흐른다. 탭/클릭/엔터 → 빨리감기.
+    replayFastRef.current = false;
+    setReplayFast(false);
+    setReplayRunning(true);
     const replayIds: string[] = [];
     const lines = (r.reading_content || '').split('\n');
     for (const line of lines) {
       const clean = line.replace(/\s+$/, '');
       if (clean.trim() === '') {
-        addLog('', 'system', false);
+        addLog('\u00A0', 'system', false, true); // 단락 구분 빈 줄
+        await replayDelay(800);
       } else {
         replayIds.push(addLog(clean, 'witch', true, true));
-        await runDelay(160);
+        await replayDelay(520);
       }
     }
     replayLogIdsRef.current = replayIds;
+    setReplayRunning(false);
+    replayFastRef.current = false;
+    setReplayFast(false);
 
-    await runDelay(500);
+    await runDelay(400);
     addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
     addLog("재생이 끝났다.   [제거]   [추출]   [목록으로 돌아가기]", "system");
     setStep('main');
@@ -1947,6 +1992,7 @@ export default function Terminal() {
     const _now = Date.now();
     if (input === lastSubmitRef.current.value && _now - lastSubmitRef.current.time < 250) return;
     lastSubmitRef.current = { value: input, time: _now };
+    setActiveLogBoundary(logs.length); // 새 액션 → 이전 줄들의 버튼 비활성화
     triggerSkipTyping();
 
     // /onboarding — 온보딩 재생 (개발/테스트용)
@@ -3064,7 +3110,7 @@ export default function Terminal() {
       <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-y-auto hide-scrollbar relative">
         <div ref={contentRef}>
         <div className="pt-4">
-          <LogDisplay logs={logs} skipTyping={skipTyping} fast={introFast} onTap={(val) => { triggerSkipTyping(); if (!isProcessing) handleUserInput(val); }} />
+          <LogDisplay logs={logs} skipTyping={skipTyping} fast={introFast || replayFast}ndary} onTap={(val) => { triggerSkipTyping(); if (!isProcessing) handleUserInput(val); }} />
         </div>
 
         {/* 셔플 애니메이션 */}

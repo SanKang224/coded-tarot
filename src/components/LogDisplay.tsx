@@ -257,11 +257,13 @@ export default function LogDisplay({
   onTap,
   skipTyping,
   fast,
+  activeBoundary = 0,
 }: {
   logs: LogType[];
   onTap?: (val: string) => void;
   skipTyping?: boolean;
   fast?: boolean;
+  activeBoundary?: number;
 }) {
   useEffect(() => { injectWitchStyle(); }, []);
 
@@ -270,10 +272,10 @@ export default function LogDisplay({
       className="flex flex-col gap-1 terminal-text"
       style={{ fontFamily: TERMINAL_FONT, fontSize: '16px', lineHeight: '1.8' }}
     >
-      {logs.map((log) => (
+      {logs.map((log, i) => (
         // id 노출 — 특정 로그(예: 법적 문서 첫 줄)를 외부에서 scrollIntoView로 정렬하기 위함.
         <div key={log.id} id={`log-${log.id}`}>
-          <LogItem log={log} onTap={onTap} skipTyping={skipTyping} fast={fast} />
+          <LogItem log={log} onTap={onTap} skipTyping={skipTyping} fast={fast} disabled={i < activeBoundary} />
         </div>
       ))}
     </div>
@@ -363,11 +365,13 @@ function LogItem({
   onTap,
   skipTyping,
   fast,
+  disabled,
 }: {
   log: LogType;
   onTap?: (val: string) => void;
   skipTyping?: boolean;
   fast?: boolean;
+  disabled?: boolean;
 }) {
   // 마녀 독백 전용 렌더러
   if (log.type === 'witch') {
@@ -424,6 +428,9 @@ function LogItem({
     <div className={`${colorClass} break-words whitespace-pre-wrap`} style={log.small ? { fontSize: DOC_FONT_SIZE } : undefined}>
       {segments.map((seg, i) =>
         'clickValue' in seg ? (
+          disabled ? (
+            <span key={i} style={{ color: 'rgba(0,255,65,0.3)', fontWeight: 'bold' }}>{seg.text}</span>
+          ) : (
           <button
             key={i}
             // 탭 시 입력창 포커스를 뺏지 않게 한다 → 키보드가 닫혔다 열리는 깜빡임·화면 밀림 방지.
@@ -444,6 +451,7 @@ function LogItem({
           >
             {seg.text}
           </button>
+          )
         ) : (
           <span key={i}>{seg.text}</span>
         )

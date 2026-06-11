@@ -45,7 +45,7 @@ export default function Footer() {
             <a href="mailto:help@witchsterminal.dev" style={{ color: GRAY_LINK, textDecoration: 'underline' }}>
               help@witchsterminal.dev
             </a>
-            {' '}(운영시간 평일 [00:00–00:00])
+            {' '}(운영시간 평일 [10:00–17:00])
           </div>
         </div>
         {/* 우: 약관·방침·정책 */}
