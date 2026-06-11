@@ -57,7 +57,7 @@ const LOGIN_OPTIONS = ['google', 'kakao'];
 // 진행 중인 스프레드를 새로고침/결제 리다이렉트에도 복원하기 위한 sessionStorage 키
 const SPREAD_KEY = 'coded_tarot_spread';
 // 배포 확인용 빌드 태그 — 부팅 화면에 표시된다. 새 코드 올릴 때마다 올린다.
-const BUILD_TAG = '0611-8';
+const BUILD_TAG = '0611-10';
 
 // 가입 동의 게이트는 로그인 전(비인증)에 통과하므로, 동의 내역을 잠시 보관했다가
 // OAuth 리다이렉트 복귀/로그인 직후 서버에 기록한다.
@@ -201,6 +201,7 @@ export default function Terminal() {
   const { logs, addLog, clearLogs, extinguishWitchLogs, markLogs, isLoaded } = useTerminalLog();
   const [step, setStep] = useState<FlowStep>('boot');
   const [isProcessing, setIsProcessing] = useState(false);
+  const [showThinking, setShowThinking] = useState(false); // 오라클 로딩 인디케이터 (처리 450ms 초과 시만 표시)
   const [skipTyping, setSkipTyping] = useState(false);
   const introFastRef = useRef(false); // 인트로(접속 우회 시퀀스) 빨리감기 플래그 (async 지연 속도용)
   const introResolveRef = useRef<(() => void) | null>(null); // 대기 중인 지연을 즉시 종료
@@ -425,6 +426,13 @@ export default function Terminal() {
     bottomRef.current?.scrollIntoView({ block: 'end' });                                  // 즉시
     requestAnimationFrame(() => bottomRef.current?.scrollIntoView({ block: 'end' })); // 레이아웃 보정
   }, [logs, cardReadings, step, isShuffling, isLoaded]);
+
+  // 오라클 로딩 인디케이터 — 처리가 450ms 넘게 이어질 때만(짧은 딜레이엔 안 뜸) '· · ·' 표시.
+  useEffect(() => {
+    if (!isProcessing) { setShowThinking(false); return; }
+    const t = setTimeout(() => setShowThinking(true), 450);
+    return () => clearTimeout(t);
+  }, [isProcessing]);
 
   // 맨 아래로 강제 스크롤 (▼ 표시 클릭 시)
   const scrollToBottom = () => {
@@ -1548,11 +1556,12 @@ export default function Terminal() {
       await runDelay(300);
     }
 
-    // 스냅샷 누적 업데이트 (꼬리질문 포함 모든 리딩 합산)
+    // 스냅샷 누적 업데이트 (꼬리질문 포함 모든 리딩 합산). 종합(synthesis)도 포함해 저장·재생·복사에 모두 남긴다.
     const newSnapshotBlock = `[질문]\n${questionContext.join('\n')}\n\n` +
       accReadings.map(r =>
         `[${r.positionName}]\nCARD #${String(r.cardNum).padStart(2,'00')} — ${r.cardNameKo} ${r.isReversed ? '[역방향]' : '[정방향]'}\n${r.reading}`
-      ).join('\n\n');
+      ).join('\n\n') +
+      (synthesisText.trim() ? `\n\n${'─'.repeat(28)}\n\n[종합]\n${synthesisText.trim()}` : '');
     setCopySnapshot(prev => prev ? `${prev}\n\n${'─'.repeat(28)}\n\n${newSnapshotBlock}` : newSnapshotBlock);
 
     // 리딩 기록 저장 (본인 리딩만 — 타인 리딩은 프라이버시 보호로 저장 안 함)
@@ -1571,6 +1580,7 @@ export default function Terminal() {
             reading: r.reading,
           })),
           readingContent: newSnapshotBlock,
+          synthesis: synthesisText || undefined,
           sessionId: sessionIdRef.current || undefined,
         }),
       }).catch(() => {/* 저장 실패는 무시 */});
@@ -1849,7 +1859,7 @@ export default function Terminal() {
         if (sessions.length > MAX_KEPT) {
           addLog(`■ 기록이 가득 찼다. 최대 ${MAX_KEPT}개까지 보관된다.`, "system");
           addLog(`>> 현재 ${sessions.length}개 — ${sessions.length - MAX_KEPT}개를 비워야 한다.`, "system");
-          addLog("[Y] 가장 오래된 것부터 자동 정리   [N] 직접 골라 삭제", "system");
+          addLog("[Y] 자동 — 가장 오래된 것부터 정리   [N] 직접 — 골라 삭제", "system");
           setMenuIndex(0);
           setStep('bag_cleanup_consent');
           setIsProcessing(false);
@@ -3542,6 +3552,12 @@ export default function Terminal() {
                 [메뉴]
               </span>
             )}
+          </div>
+        )}
+
+        {showThinking && (
+          <div className="text-[#00FF41] my-1" style={{ fontFamily: 'var(--font-roboto-mono), var(--font-noto-sans-kr), "Courier New", monospace', fontSize: '16px' }}>
+            <span>■ 마녀가 카드를 읽는 중 </span><span className="oracle-dots" />
           </div>
         )}
 

@@ -41,6 +41,18 @@ const WITCH_STYLE = `
   opacity: 0.6;
   display: block;
 }
+/* 오라클 로딩 — 점이 늘었다 줄었다 (· → · · → · · · → · · → ·) */
+@keyframes oracle-dots {
+  0%   { content: '·'; }
+  25%  { content: '· ·'; }
+  50%  { content: '· · ·'; }
+  75%  { content: '· ·'; }
+  100% { content: '·'; }
+}
+.oracle-dots::after {
+  content: '·';
+  animation: oracle-dots 1.3s steps(1, end) infinite;
+}
 `;
 
 function injectWitchStyle() {
