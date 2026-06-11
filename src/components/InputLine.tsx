@@ -14,6 +14,7 @@ type InputLineProps = {
 export default function InputLine({ onSubmit, onArrowKey, disabled, allowEmpty, focusKey, wantKeyboard = true }: InputLineProps) {
   const ref = useRef<HTMLTextAreaElement>(null);
   const enterHandledRef = useRef(false); // 같은 Enter가 keydown·keyup 양쪽에서 제출되는 중복 방지
+  const lastSubmitAtRef = useRef(0); // 값과 무관한 시간 잠금 — iOS/IME의 어떤 중복 발화든 차단(두줄출력 방지)
 
   useEffect(() => {
     if (disabled) return;
@@ -39,6 +40,12 @@ export default function InputLine({ onSubmit, onArrowKey, disabled, allowEmpty, 
   const submitValue = () => {
     const val = (ref.current?.value ?? '').replace(/\s*\n\s*/g, ' ').trim();
     if (!val && !allowEmpty) return;
+    // 값과 무관한 중복 차단: 직전 제출과 500ms 내면 무시.
+    // (사람은 같은 동작을 500ms 안에 두 번 하지 않는다. iOS Safari/IME가 Enter를
+    //  keydown·keyup·중복 keydown 등으로 두 번 발화시켜 '두줄 출력'되던 것을 근본 차단.)
+    const now = Date.now();
+    if (now - lastSubmitAtRef.current < 500) return;
+    lastSubmitAtRef.current = now;
     if (ref.current) {
       ref.current.value = '';
       ref.current.style.height = 'auto';

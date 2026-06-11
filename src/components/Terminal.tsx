@@ -57,7 +57,7 @@ const LOGIN_OPTIONS = ['google', 'kakao'];
 // 진행 중인 스프레드를 새로고침/결제 리다이렉트에도 복원하기 위한 sessionStorage 키
 const SPREAD_KEY = 'coded_tarot_spread';
 // 배포 확인용 빌드 태그 — 부팅 화면에 표시된다. 새 코드 올릴 때마다 올린다.
-const BUILD_TAG = '0611-4';
+const BUILD_TAG = '0611-5';
 
 // 가입 동의 게이트는 로그인 전(비인증)에 통과하므로, 동의 내역을 잠시 보관했다가
 // OAuth 리다이렉트 복귀/로그인 직후 서버에 기록한다.
@@ -3154,12 +3154,9 @@ export default function Terminal() {
         || /^(완료|입력\s?완료|\/done)$/i.test(input.trim());
 
       if (!isComposeDone) {
-        // 한 줄 누적 (카톡 메시지처럼 화면에 쌓인다)
-        const wasFirst = questionDraft.length === 0;
+        // 한 줄 누적 (카톡 메시지처럼 화면에 쌓인다). 누적되면 아래 [입력 완료] 버튼이 나타난다.
         addLog(input, 'user');
         setQuestionDraft(prev => [...prev, input]);
-        // 첫 줄을 쌓은 직후 한 번만 — 아직 전송 전임을 분명히 알려 다시 입력하는 혼선을 막는다.
-        if (wasFirst) addLog("■ 받아 적었다. 더 보탤 말이 있으면 잇고, 없으면 [입력 완료].", "system");
         return;
       }
 
@@ -3502,11 +3499,12 @@ export default function Terminal() {
         {/* 카톡식 작성 중 — 항상 보이는 [입력 완료] 버튼 */}
         {step === 'ask_question' && !isProcessing && (
           <div
-            className="flex items-center gap-8 my-2"
+            className="flex items-center flex-wrap my-2"
             style={{
               fontFamily: 'var(--font-roboto-mono), var(--font-noto-sans-kr), "Courier New", monospace',
               fontSize: '16px',
               fontWeight: 'bold',
+              gap: '2.5rem', // 버튼 사이 간격 확실히 확보(인라인 강제)
             }}
           >
             {questionDraft.length > 0 && (
