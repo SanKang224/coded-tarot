@@ -57,7 +57,7 @@ const LOGIN_OPTIONS = ['google', 'kakao'];
 // 진행 중인 스프레드를 새로고침/결제 리다이렉트에도 복원하기 위한 sessionStorage 키
 const SPREAD_KEY = 'coded_tarot_spread';
 // 배포 확인용 빌드 태그 — 부팅 화면에 표시된다. 새 코드 올릴 때마다 올린다.
-const BUILD_TAG = '0611-5';
+const BUILD_TAG = '0611-6';
 
 // 가입 동의 게이트는 로그인 전(비인증)에 통과하므로, 동의 내역을 잠시 보관했다가
 // OAuth 리다이렉트 복귀/로그인 직후 서버에 기록한다.
@@ -1591,7 +1591,7 @@ export default function Terminal() {
       // 조언 유도 — 결과가 욕망에 어긋날 때만 마녀 혼잣말 + [조언]을 띄운다. 그 아래 꼬리질문 안내(시스템).
       await renderAdviceNudge(accReadings, synthesisText, questionContext.join('\n'), readingPlan?.type);
       stickToBottomRef.current = true; // 조언 멘트로 밀려도 끝 안내는 보이도록 한 번 더
-      addLog("꼬리질문이 있으면 입력하라.   더 궁금한 것이 없다면 [마치기]", "system");
+      addLog("꼬리질문이 있으면 입력하라.   더 궁금한 것이 없다면 아래 마치기.", "system");
       // 꼬리질문: context·plan 리셋 (cardReadings는 다음 뽑기 시작 시 초기화)
       // 주제 감지를 위해 현재 컨텍스트를 저장한 뒤 초기화
       setPrevTopicContext(questionContext.join(' '));
@@ -2871,13 +2871,17 @@ export default function Terminal() {
     // 빈 입력(엔터)은 confirm 계열 스텝에서만 허용 (Y로 처리)
     const confirmSteps: FlowStep[] = ['confirm_plan', 'confirm_flow_config', 'confirm_context', 'confirm_identity', 'ask_flow_period', 'login'];
     if (input === '' && !confirmSteps.includes(step)) return;
-    // 센티넬 echo 보정: 조언은 기계톤, 꼬리질문 제안은 제안된 질문 그대로
-    const echoText = input === '__ADVICE_REQ__'
-      ? '>> REQ: 조언'
-      : input.startsWith('__FOLLOWUP__')
-        ? input.slice('__FOLLOWUP__'.length)
-        : input;
-    addLog(echoText, 'user');
+    // 입력 echo는 여기 한 곳에서만 한다 — 각 스텝 핸들러는 따로 echo하지 않는다(중복 '두 줄 출력' 방지).
+    //  - __ADVICE_REQ__ : 기계톤으로 치환
+    //  - __FOLLOWUP__   : 제안된 질문 텍스트로 치환
+    //  - 제어 센티넬(__COMPOSE_DONE__/__FINISH_SPREAD__/__MENU__)·빈 엔터 : 사용자에게 보이면 안 되므로 echo 안 함
+    let echoText: string | null;
+    if (input === '__ADVICE_REQ__') echoText = '>> REQ: 조언';
+    else if (input.startsWith('__FOLLOWUP__')) echoText = input.slice('__FOLLOWUP__'.length);
+    else if (input === '__COMPOSE_DONE__' || input === '__FINISH_SPREAD__' || input === '__MENU__') echoText = null;
+    else if (input.trim() === '') echoText = null;
+    else echoText = input;
+    if (echoText !== null) addLog(echoText, 'user');
 
     // 꼬리질문 제안 버튼(센티넬) — 단계와 무관하게 멀티라인 누적을 건너뛰고 바로 분석/드로로 직행
     if (input.startsWith('__FOLLOWUP__')) {
@@ -3154,8 +3158,8 @@ export default function Terminal() {
         || /^(완료|입력\s?완료|\/done)$/i.test(input.trim());
 
       if (!isComposeDone) {
-        // 한 줄 누적 (카톡 메시지처럼 화면에 쌓인다). 누적되면 아래 [입력 완료] 버튼이 나타난다.
-        addLog(input, 'user');
+        // 한 줄 누적 (카톡 메시지처럼 화면에 쌓인다). echo는 위 전역 echo가 이미 했다.
+        // 누적되면 아래 [입력 완료] 버튼이 나타난다.
         setQuestionDraft(prev => [...prev, input]);
         return;
       }
@@ -3208,7 +3212,6 @@ export default function Terminal() {
 
     // confirm_new_topic — 새 주제 전환 확인 (AI가 NEW_SPREAD 판단 후 진입)
     if (step === 'confirm_new_topic') {
-      addLog(input, 'user');
       if (isYes(input)) {
         // 전체 리셋 후 저장된 질문으로 바로 진행 (재입력 불필요)
         setCurrentDeck([]);
@@ -3254,7 +3257,6 @@ export default function Terminal() {
 
     // confirm_identity
     if (step === 'confirm_identity') {
-      addLog(input, 'user');
       const t = input.trim().toUpperCase();
       const isSelf = (s: string) => {
         if (['Y', 'ㅛ', 'ㅇ', 'ㅇㅇ', 'YY'].includes(s)) return true;
@@ -3285,7 +3287,6 @@ export default function Terminal() {
 
     // confirm_context — 추론 컨텍스트 확인/수정
     if (step === 'confirm_context') {
-      addLog(input, 'user');
       const t = input.trim();
       if (t === '' || t.toUpperCase() === 'Y') {
         // 확인 — 현재 컨텍스트로 분석 재개
