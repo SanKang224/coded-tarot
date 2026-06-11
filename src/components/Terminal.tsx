@@ -471,6 +471,19 @@ export default function Terminal() {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         const { isNewUser } = await loadTokenBalance();
+        setActiveLogBoundary(logs.length); // 복귀(충전/새로고침/OAuth) 시 이전 줄들의 버튼 비활성화
+        // 결제 복귀 — 충전 성공/실패 멘트 (토스 success 페이지가 보관)
+        try {
+          const cr = sessionStorage.getItem('charge_result');
+          if (cr) {
+            sessionStorage.removeItem('charge_result');
+            const r = JSON.parse(cr);
+            addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
+            if (r.ok) addLog(`✦ ${r.tokensAdded}토큰 충전 완료. 현재 잔액: ${r.balance}토큰`, "system");
+            else addLog("■ 충전 실패. 결제가 처리되지 않았다. 다시 시도하라.", "system");
+            addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
+          }
+        } catch { /* 무시 */ }
         const resumed = restoreSpread();
         if (resumed) {
           // 결제 리다이렉트/탭 이동 후 진행 중이던 리딩 복원
@@ -2059,6 +2072,19 @@ export default function Terminal() {
       } catch {
         addLog("■ 클립보드 접근 실패. 브라우저 권한을 확인하라.", "system");
       }
+      await runDelay(300);
+      // 기록 목록으로 복귀 (추출 후 갇히지 않게)
+      addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
+      addLog("[ 기록 ]", "system");
+      if (bagReadings.length === 0) {
+        addLog("  기록 없음.", "system");
+        addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
+        showMenuPrompt();
+      } else {
+        addLog("  방향키·엔터 또는 줄을 눌러 선택하면 그 기록이 다시 흐른다.", "system");
+        setMenuIndex(0);
+        setStep('bag_history');
+      }
       return;
     }
 
@@ -3239,21 +3265,33 @@ export default function Terminal() {
         )}
 
         {/* 카톡식 작성 중 — 항상 보이는 [입력 완료] 버튼 */}
-        {step === 'ask_question' && questionDraft.length > 0 && !isProcessing && (
+        {step === 'ask_question' && !isProcessing && (
           <div
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => { triggerSkipTyping(); if (!isProcessing) handleUserInput('__COMPOSE_DONE__'); }}
-            className="cursor-pointer my-2"
+            className="flex items-center gap-4 my-2"
             style={{
               fontFamily: 'var(--font-roboto-mono), var(--font-noto-sans-kr), "Courier New", monospace',
               fontSize: '16px',
-              color: '#00FF41',
               fontWeight: 'bold',
-              textDecoration: 'underline',
-              textShadow: 'none',
             }}
           >
-            [입력 완료]
+            {questionDraft.length > 0 && (
+              <span
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => { triggerSkipTyping(); if (!isProcessing) handleUserInput('__COMPOSE_DONE__'); }}
+                className="cursor-pointer"
+                style={{ color: '#00FF41', textDecoration: 'underline' }}
+              >
+                [입력 완료]
+              </span>
+            )}
+            <span
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => { triggerSkipTyping(); if (!isProcessing) handleUserInput('/menu'); }}
+              className="cursor-pointer"
+              style={{ color: 'rgba(0,255,65,0.7)', textDecoration: 'underline' }}
+            >
+              [메뉴]
+            </span>
           </div>
         )}
 

@@ -140,6 +140,12 @@ function parseClickable(text: string): Segment[] {
       i += privacyM[0].length;
       continue;
     }
+    const refundM = rest.match(/^\[청약철회정책\]/);
+    if (refundM) {
+      segments.push({ text: refundM[0], clickValue: '/refund' });
+      i += refundM[0].length;
+      continue;
+    }
     // [회원 탈퇴] / [탈퇴 확정]
     const withdrawM = rest.match(/^\[회원 탈퇴\]/);
     if (withdrawM) {

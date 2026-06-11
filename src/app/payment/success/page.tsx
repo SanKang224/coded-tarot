@@ -31,9 +31,12 @@ function SuccessContent() {
         if (data.error) {
           setStatus('error');
           setMessage(`결제 확인 실패: ${data.error}`);
+          try { sessionStorage.setItem('charge_result', JSON.stringify({ ok: false })); } catch { /* 무시 */ }
         } else {
           setStatus('ok');
           setMessage(`✦ ${data.tokensAdded}토큰 충전 완료. 잔액: ${data.balance}토큰`);
+          // 터미널 복귀 시 충전 결과 멘트를 띄우기 위해 보관
+          try { sessionStorage.setItem('charge_result', JSON.stringify({ ok: true, tokensAdded: data.tokensAdded, balance: data.balance })); } catch { /* 무시 */ }
           // 2초 후 터미널로 복귀
           setTimeout(() => router.push('/'), 2000);
         }
