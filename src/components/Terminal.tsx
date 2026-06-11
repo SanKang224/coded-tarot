@@ -57,7 +57,7 @@ const LOGIN_OPTIONS = ['google', 'kakao'];
 // 진행 중인 스프레드를 새로고침/결제 리다이렉트에도 복원하기 위한 sessionStorage 키
 const SPREAD_KEY = 'coded_tarot_spread';
 // 배포 확인용 빌드 태그 — 부팅 화면에 표시된다. 새 코드 올릴 때마다 올린다.
-const BUILD_TAG = '0611-7';
+const BUILD_TAG = '0611-8';
 
 // 가입 동의 게이트는 로그인 전(비인증)에 통과하므로, 동의 내역을 잠시 보관했다가
 // OAuth 리다이렉트 복귀/로그인 직후 서버에 기록한다.
@@ -367,14 +367,19 @@ export default function Terminal() {
       scrollToBottomNow();
     };
 
+    // 레이아웃 변화(키보드 열닫·셔플·카드그리드 등) 직후의 scroll 이벤트는 사용자 의도가 아니므로
+    // stick 해제에서 제외한다. (iOS에서 자동스크롤이 죽던 핵심 원인 — 레이아웃이 scrollTop을 흔들어 '위로 올림'으로 오판)
+    let lastResize = 0;
+
     let prevScrollTop = container.scrollTop;
     const onScroll = () => {
       const st = container.scrollTop;
-      const scrolledUp = st < prevScrollTop - 2; // 사용자가 위로 올림 (프로그램 스크롤은 항상 아래로)
+      const scrolledUp = st < prevScrollTop - 8; // 사용자가 8px 이상 위로 올림
       prevScrollTop = st;
-      if (scrolledUp) { stickToBottomRef.current = false; updateHint(); return; } // 글리치 자동스크롤에 안 먹히게 즉시 해제
-      // 프로그램 스크롤이 유발한 이벤트는 stick 판정에서 제외 (사용자 의도만 반영)
-      if (performance.now() - lastProg < 150) { updateHint(); return; }
+      const now = performance.now();
+      // 프로그램 스크롤·레이아웃 변화가 유발한 이벤트는 사용자 의도가 아니므로 stick을 건드리지 않는다.
+      if (now - lastProg < 200 || now - lastResize < 400) { updateHint(); return; }
+      if (scrolledUp) { stickToBottomRef.current = false; updateHint(); return; }
       stickToBottomRef.current =
         container.scrollHeight - container.scrollTop - container.clientHeight < 120;
       updateHint();
@@ -386,8 +391,9 @@ export default function Terminal() {
     // 추적하지 않는다 — 글리치마다 바닥으로 끌어내려 스크롤이 끊기던 문제 방지. 타이핑 성장은 ResizeObserver가 따라간다.
     mo.observe(content, { childList: true, subtree: true });
 
-    // content 높이 변화 + container 높이 변화(키보드 열림/닫힘) 모두 추적
-    const ro = new ResizeObserver(follow);
+    // content 높이 변화 + container 높이 변화(키보드 열림/닫힘) 모두 추적. 변화 시각을 기록해 위 onScroll 오판을 막는다.
+    const onResize = () => { lastResize = performance.now(); follow(); };
+    const ro = new ResizeObserver(onResize);
     ro.observe(content);
     ro.observe(container);
 
@@ -1338,6 +1344,7 @@ export default function Terminal() {
       return;
     }
     setIsProcessing(true);
+    stickToBottomRef.current = true; // 카드 뽑기 결과는 항상 바닥을 따라가게 (카드 탭은 handleUserInput을 안 거침)
 
     const deckToUse = currentDeck.length > 0
       ? currentDeck
