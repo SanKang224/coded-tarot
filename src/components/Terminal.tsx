@@ -1826,7 +1826,7 @@ export default function Terminal() {
         if (i < bagPayments.length - 1) addLog("", "system", false);
       });
       addLog("", "system", false);
-      addLog("  ※ 결제 내역은 3년간 보관 후 자동 삭제된다.", "system");
+      addLog("  ※ 최근 3년 내역만 표시된다. 결제 기록은 법령에 따라 5년간 보존된다.", "system");
     }
     addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
     showMenuPrompt();

@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS public.payments (
   tokens_added integer NOT NULL,          -- 지급 토큰 수
   package_name text NOT NULL,             -- '소 (3토큰)' | '중 (15토큰)' | '대 (30토큰)'
   payment_key  text,                      -- Toss Payments paymentKey (검증용)
-  expires_at   timestamptz NOT NULL       -- insert 시 created_at + 3년으로 계산해서 삽입
+  expires_at   timestamptz NOT NULL       -- created_at + 3년. 마이페이지 영수증을 최근 3년만 '표시'하는 필터용 (삭제 아님)
 );
 
 -- RLS 활성화
@@ -29,12 +29,12 @@ CREATE INDEX IF NOT EXISTS payments_user_created
   ON public.payments (user_id, created_at DESC);
 
 -- ============================================================
--- 만료 레코드 자동 삭제 (pg_cron 사용)
--- Supabase Pro 플랜 이상에서 pg_cron 활성화 후 실행
+-- ⚠ 결제 기록 자동 삭제 금지 (전자상거래법)
+-- ------------------------------------------------------------
+-- 결제·대금결제 기록은 관계 법령상 5년 보존 의무가 있다.
+-- expires_at(3년)을 기준으로 payments 행을 DELETE 하는 잡을 절대 만들지 마라 — 법 위반이다.
+-- expires_at 은 마이페이지에 최근 3년 영수증만 '표시'하기 위한 필터일 뿐, 삭제 트리거가 아니다.
+--
+-- 보존기간(탈퇴 후 5년) 만료 시 탈퇴회원 데이터 파기는 아래 마이그레이션이 담당한다:
+--   supabase/migrations/20260611_retention_purge_cron.sql
 -- ============================================================
-
--- SELECT cron.schedule(
---   'delete-expired-payments',
---   '0 3 * * *',   -- 매일 새벽 3시
---   $$ DELETE FROM public.payments WHERE expires_at < now(); $$
--- );
