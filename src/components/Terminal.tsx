@@ -36,7 +36,8 @@ type FlowStep =
   | 'confirm_flow_config' | 'ask_flow_period' | 'confirm_new_topic' | 'confirm_period_split'
   | 'ready_to_draw' | 'card_draw'
   | 'token_shop' | 'token_shop_confirm'
-  | 'bag' | 'bag_history' | 'confirm_end_session' | 'confirm_nav';
+  | 'bag' | 'bag_history' | 'confirm_end_session' | 'confirm_nav'
+  | 'bag_cleanup_consent' | 'bag_delete_confirm';
   
 // 공지사항 (Supabase 대시보드에서 작성, 앱은 읽기 전용)
 type Notice = { id: string; kind: string; title: string; body: string; pinned: boolean; published_at: string };
@@ -274,9 +275,15 @@ export default function Terminal() {
   const scrollAnchorIdRef = useRef<string | null>(null);
   const [pendingNav, setPendingNav] = useState<'Q' | 'B' | null>(null); // 스프레드 중 QTB 이동 확인 대기
   const [navReturnStep, setNavReturnStep] = useState<FlowStep>('ask_question'); // 이동 취소 시 복귀 단계
+  const MAX_KEPT = 10; // 기록 보관 상한(스프레드 단위)
+  const [bagDeleteMode, setBagDeleteMode] = useState(false); // bag_history를 삭제 선택용으로 재사용할 때 true
+  const [expandedQ, setExpandedQ] = useState<Set<number>>(new Set()); // 삭제 목록에서 [▼]로 질문 전체를 펼친 항목
+  const [pendingDelete, setPendingDelete] = useState<{ index: number; session_id: string | null; id: string } | null>(null); // 삭제 확인 대기 기록
   const currentOptions = step === 'login' ? LOGIN_OPTIONS
     : step === 'confirm_identity' ? ['Y', 'N']
     : step === 'bag_history' ? bagReadings.map((_, i) => String(i + 1))
+    : step === 'bag_cleanup_consent' ? ['Y', 'N']
+    : step === 'bag_delete_confirm' ? ['Y', 'N']
     : [];
 
   // ─────────────────────────────────────────────────────────
@@ -1575,7 +1582,7 @@ export default function Terminal() {
       addLog("", "system", false);
       // 조언 유도 — 결과가 욕망에 어긋날 때만 마녀 혼잣말 + [조언]을 띄운다. 그 아래 꼬리질문 안내(시스템).
       await renderAdviceNudge(accReadings, synthesisText, questionContext.join('\n'), readingPlan?.type);
-      addLog("꼬리질문이 있으면 입력하라.", "system");
+      addLog("꼬리질문이 있으면 입력하라.   더 궁금한 것이 없다면 [마치기]", "system");
       // 꼬리질문: context·plan 리셋 (cardReadings는 다음 뽑기 시작 시 초기화)
       // 주제 감지를 위해 현재 컨텍스트를 저장한 뒤 초기화
       setPrevTopicContext(questionContext.join(' '));
@@ -1775,7 +1782,7 @@ export default function Terminal() {
         addLog("", "system", false);
 
         // ── 조회 메뉴 ───────────────────────────────
-        addLog(`[기록]  스프레드 ${readingSessions.length}건`, "system");
+        addLog(`[기록]  스프레드 ${readingSessions.length}건 (최대 ${MAX_KEPT}건 보관)`, "system");
         addLog(`[결제 내역]  결제 ${payments.length}건`, "system");
         addLog("", "system", false);
         // ── 법적 고지 ───────────────────────────────
@@ -1797,9 +1804,78 @@ export default function Terminal() {
     setIsProcessing(false);
   };
 
+  // 스프레드 종료([마치기]) — 상태를 닫고, 보관 상한 초과 시 정리를 묻는다.
+  const finishSpread = async () => {
+    setIsProcessing(true);
+    // 스프레드 상태 리셋 (confirm_nav 종료와 동일)
+    setQuestionContext([]);
+    setReadingPlan(null);
+    setQuestionAttempts(0);
+    setCurrentDeck([]);
+    setDrawnCards([]);
+    setCardReadings([]);
+    setDeckIndex(0);
+    setSessionCount(0);
+    setDrawnDeckIndices(new Set());
+    setDrawnCardIds(new Set());
+    setReadingSessionSummary('');
+    setPrevTopicContext('');
+    setIdentityConfirmed(false);
+
+    addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
+    try {
+      const res = await fetch('/api/bag');
+      if (res.ok) {
+        const data = await res.json();
+        const sessions = data.readingSessions ?? [];
+        setBagReadings(sessions);
+        setBagPayments(data.payments ?? []);
+        if (sessions.length > MAX_KEPT) {
+          addLog(`■ 기록이 가득 찼다. 최대 ${MAX_KEPT}개까지 보관된다.`, "system");
+          addLog(`>> 현재 ${sessions.length}개 — ${sessions.length - MAX_KEPT}개를 비워야 한다.`, "system");
+          addLog("[Y] 가장 오래된 것부터 자동 정리   [N] 직접 골라 삭제", "system");
+          setMenuIndex(0);
+          setStep('bag_cleanup_consent');
+          setIsProcessing(false);
+          return;
+        }
+      }
+    } catch { /* 네트워크 실패 시 그냥 종료 */ }
+    addLog("세션을 종료한다.", "system");
+    await runDelay(300);
+    addLog("- - - - - - - - - - - - - - - -", "separator");
+    showMenuPrompt();
+    setIsProcessing(false);
+  };
+
+  // 삭제 목록의 [▼] — 잘린 최초질문 전체를 펼치거나 접는다.
+  const toggleExpandQ = (idx: number) => {
+    setExpandedQ(prev => {
+      const next = new Set(prev);
+      if (next.has(idx)) next.delete(idx); else next.add(idx);
+      return next;
+    });
+  };
+
+  // 삭제 목록에서 기록 선택 → 삭제 확인 단계로.
+  const promptDeleteConfirm = (idx: number) => {
+    const t = bagReadings[idx];
+    if (!t) return;
+    const q = t.question_text?.trim() || '(제목 없음)';
+    addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
+    addLog(`▶ 선택: ${fmtDate(t.created_at)}  Q: ${q}`, "system");
+    addLog("이 기록을 지울까?", "system");
+    addLog("[Y] 삭제   [N] 취소", "system");
+    setPendingDelete({ index: idx, session_id: t.session_id, id: t.id });
+    setMenuIndex(0);
+    setStep('bag_delete_confirm');
+  };
+
   // 질문 내역 — 스프레드(세션) 단위. 방향키·엔터 또는 줄 클릭으로 선택 → 재생
   const showQuestionHistory = async () => {
     extinguishWitchLogs(); // 직전 재생 독백을 회색으로 꺼뜨림
+    setBagDeleteMode(false); // 일반 열람 = 재생 모드
+    setExpandedQ(new Set());
     addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
     addLog("[ 기록 ]", "system");
     if (bagReadings.length === 0) {
@@ -2364,16 +2440,20 @@ export default function Terminal() {
       return;
     }
 
-    // bag_history — 질문 내역 선택 (엔터=현재 선택 재생 / 번호 입력=해당 재생)
+    // bag_history — 기록 선택. 일반 모드=재생 / 삭제 모드=삭제 확인.
     if (step === 'bag_history') {
       if (input === '') {
-        if (bagReadings.length > 0) await replayReading(menuIndex + 1);
+        if (bagReadings.length > 0) {
+          if (bagDeleteMode) promptDeleteConfirm(menuIndex);
+          else await replayReading(menuIndex + 1);
+        }
         return;
       }
       const n = parseInt(input.trim(), 10);
       if (!Number.isNaN(n) && n >= 1 && n <= bagReadings.length) {
         addLog(input.trim(), 'user');
-        await replayReading(n);
+        if (bagDeleteMode) promptDeleteConfirm(n - 1);
+        else await replayReading(n);
         return;
       }
       // 그 외 입력 무시 (Q/T/B는 전역 처리에서 이미 잡힘)
@@ -2819,13 +2899,96 @@ export default function Terminal() {
     // confirm_end_session — 세션 종료 확인
     if (step === 'confirm_end_session') {
       if (isYes(input)) {
-        addLog("세션을 종료한다.", "system");
-        await runDelay(300);
-        addLog("- - - - - - - - - - - - - - - -", "separator");
-        showMenuPrompt();
+        await finishSpread(); // 종료 + 보관 상한 정리
       } else {
         addLog("꼬리질문을 입력하라.", "system");
         setStep('ask_question');
+      }
+      return;
+    }
+
+    // bag_cleanup_consent — 보관 상한 초과 시 정리 방식 선택
+    if (step === 'bag_cleanup_consent') {
+      const val = input.trim() === '' ? (currentOptions[menuIndex] ?? 'N') : input;
+      if (isYes(val)) {
+        setIsProcessing(true);
+        addLog("■ 오래된 기록부터 정리한다.", "system");
+        // bagReadings는 최근순 → 배열 끝이 가장 오래된 기록.
+        const excess = bagReadings.length - MAX_KEPT;
+        const victims = bagReadings.slice(bagReadings.length - excess);
+        let removed = 0;
+        for (const v of victims) {
+          try {
+            const res = await fetch('/api/bag', {
+              method: 'DELETE',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ sessionId: v.session_id || undefined, id: v.id }),
+            });
+            if (res.ok) removed++;
+          } catch { /* 개별 실패는 건너뛴다 */ }
+        }
+        const remaining = bagReadings.slice(0, bagReadings.length - removed);
+        setBagReadings(remaining);
+        addLog(`✦ ${removed}개를 비웠다. 남은 기록 ${remaining.length}개.`, "system");
+        await runDelay(300);
+        addLog("- - - - - - - - - - - - - - - -", "separator");
+        showMenuPrompt();
+        setIsProcessing(false);
+      } else {
+        setBagDeleteMode(true);
+        setExpandedQ(new Set());
+        addLog("━━━━━━━━━━━━━━━━━━━━━━━━━━━━", "system", false);
+        addLog("[ 삭제할 기록 선택 ]", "system");
+        addLog("  지울 기록의 번호를 누르거나 줄을 눌러라. [▼]로 질문 전체를 본다.", "system");
+        setMenuIndex(0);
+        setStep('bag_history');
+      }
+      return;
+    }
+
+    // bag_delete_confirm — 선택한 기록 삭제 확인
+    if (step === 'bag_delete_confirm') {
+      const val = input.trim() === '' ? (currentOptions[menuIndex] ?? 'N') : input;
+      const t = pendingDelete;
+      if (isYes(val) && t) {
+        setIsProcessing(true);
+        try {
+          const res = await fetch('/api/bag', {
+            method: 'DELETE',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sessionId: t.session_id || undefined, id: t.id }),
+          });
+          if (res.ok) {
+            const next = bagReadings.filter((_, i) => i !== t.index);
+            setBagReadings(next);
+            setExpandedQ(new Set());
+            addLog("✦ 기록을 지웠다.", "system");
+            if (next.length > MAX_KEPT) {
+              addLog(`>> 현재 ${next.length}개 — ${next.length - MAX_KEPT}개 더 비워야 한다.`, "system");
+              setMenuIndex(0);
+              setStep('bag_history');
+            } else {
+              setBagDeleteMode(false);
+              addLog(`남은 기록 ${next.length}개. 정리 완료.`, "system");
+              await runDelay(300);
+              addLog("- - - - - - - - - - - - - - - -", "separator");
+              showMenuPrompt();
+            }
+          } else {
+            addLog("■ 삭제 실패. 잠시 후 다시 시도하라.", "system");
+            setStep('bag_history');
+          }
+        } catch {
+          addLog("■ 제거 회선 불안정.", "system");
+          setStep('bag_history');
+        }
+        setPendingDelete(null);
+        setIsProcessing(false);
+      } else {
+        setPendingDelete(null);
+        addLog("■ 취소.", "system");
+        setMenuIndex(0);
+        setStep('bag_history');
       }
       return;
     }
@@ -3243,23 +3406,47 @@ export default function Terminal() {
               const nn = String(idx + 1).padStart(2, '0');
               const q = r.question_text?.trim() || '(제목 없음)';
               const tail = r.count > 1 ? ` (+꼬리 ${r.count - 1})` : '';
+              const expanded = expandedQ.has(idx);
               return (
-                <div
-                  key={idx}
-                  onClick={() => { triggerSkipTyping(); if (!isProcessing) replayReading(idx + 1); }}
-                  title={q}
-                  className={`cursor-pointer whitespace-nowrap overflow-hidden text-ellipsis ${isSel ? 'text-white' : 'text-[#00FF41]'}`}
-                >
+                <div key={idx} className={isSel ? 'text-white' : 'text-[#00FF41]'}>
+                  <div className="flex items-center">
+                    <span
+                      onClick={() => { triggerSkipTyping(); if (!isProcessing) { bagDeleteMode ? promptDeleteConfirm(idx) : replayReading(idx + 1); } }}
+                      className="cursor-pointer flex-1 min-w-0 whitespace-nowrap overflow-hidden text-ellipsis"
+                    >
                   {isSel ? '▶ ' : '  '}[{nn}] {fmtDate(r.created_at)}{tail}  Q: {q}
+                    </span>
+                    <span
+                      onClick={() => { if (!isProcessing) toggleExpandQ(idx); }}
+                      title="질문 전체 보기"
+                      className="cursor-pointer shrink-0 ml-2"
+                    >
+                      {expanded ? '[▲]' : '[▼]'}
+                    </span>
+                  </div>
+                  {expanded && (
+                    <div className="whitespace-pre-wrap break-words pl-6 opacity-90">Q: {q}</div>
+                  )}
                 </div>
               );
             })}
             <div
-              onClick={() => { triggerSkipTyping(); if (!isProcessing) openBag(); }}
+              onClick={() => {
+                triggerSkipTyping();
+                if (isProcessing) return;
+                if (bagDeleteMode) {
+                  setBagDeleteMode(false);
+                  setExpandedQ(new Set());
+                  addLog("- - - - - - - - - - - - - - - -", "separator");
+                  showMenuPrompt();
+                } else {
+                  openBag();
+                }
+              }}
               className="cursor-pointer text-[#00FF41] mt-2"
               style={{ fontWeight: 'bold', textDecoration: 'underline' }}
             >
-              [가방으로 돌아가기]
+              {bagDeleteMode ? '[삭제 마치기]' : '[가방으로 돌아가기]'}
             </div>
           </div>
         )}
@@ -3267,7 +3454,7 @@ export default function Terminal() {
         {/* 카톡식 작성 중 — 항상 보이는 [입력 완료] 버튼 */}
         {step === 'ask_question' && !isProcessing && (
           <div
-            className="flex items-center gap-4 my-2"
+            className="flex items-center gap-8 my-2"
             style={{
               fontFamily: 'var(--font-roboto-mono), var(--font-noto-sans-kr), "Courier New", monospace',
               fontSize: '16px',
@@ -3282,6 +3469,16 @@ export default function Terminal() {
                 style={{ color: '#00FF41', textDecoration: 'underline' }}
               >
                 [입력 완료]
+              </span>
+            )}
+            {sessionCount > 0 && questionDraft.length === 0 && (
+              <span
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => { triggerSkipTyping(); if (!isProcessing) finishSpread(); }}
+                className="cursor-pointer"
+                style={{ color: '#00FF41', textDecoration: 'underline' }}
+              >
+                [마치기]
               </span>
             )}
             <span
@@ -3333,7 +3530,7 @@ export default function Terminal() {
             disabled={isProcessing}
             focusKey={`${step}-${logs.length}`}
             wantKeyboard={KEYBOARD_STEPS.includes(step)}
-            allowEmpty={(['confirm_plan', 'confirm_flow_config', 'confirm_context', 'confirm_identity', 'ask_flow_period', 'confirm_new_topic', 'token_shop_confirm', 'login', 'confirm_end_session', 'bag_history'] as FlowStep[]).includes(step)}
+            allowEmpty={(['confirm_plan', 'confirm_flow_config', 'confirm_context', 'confirm_identity', 'ask_flow_period', 'confirm_new_topic', 'token_shop_confirm', 'login', 'confirm_end_session', 'bag_history', 'bag_cleanup_consent', 'bag_delete_confirm'] as FlowStep[]).includes(step)}
           />
         </div>
       )}

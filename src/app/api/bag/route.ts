@@ -63,9 +63,9 @@ export async function GET() {
         reading_content: rows.map(r => r.reading_content).filter(Boolean).join(SEP),
       };
     })
-    // 최근 활동순으로 정렬 후 최대 10개
-    .sort((a, b) => (a.lastAt < b.lastAt ? 1 : -1))
-    .slice(0, 10);
+    // 최근 활동순 정렬. 보관 상한(10) 관리를 위해 전체를 반환한다.
+    // (정상 상태에선 10개 이하이며, 마치기 시점에 초과분을 정리한다.)
+    .sort((a, b) => (a.lastAt < b.lastAt ? 1 : -1));
 
   // 결제 내역 (3년 이내, 최신순)
   const { data: payments } = await supabase
